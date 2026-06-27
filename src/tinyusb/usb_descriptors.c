@@ -1,8 +1,5 @@
 /*
- * The MIT License (MIT)
- *
- * Copyright (c) 2020 Ha Thach (tinyusb.org)
- * Copyright (c) 2020 Jerzy Kasenberg
+ * USB descriptors for the UAC1 headset build.
  */
 
 #include <string.h>
@@ -11,7 +8,7 @@
 #include "usb_descriptors.h"
 
 //--------------------------------------------------------------------+
-// Device Descriptors
+// Device Descriptor
 //--------------------------------------------------------------------+
 tusb_desc_device_t const desc_device =
 {
@@ -43,64 +40,41 @@ uint8_t const * tud_descriptor_device_cb(void)
 //--------------------------------------------------------------------+
 // Configuration Descriptor
 //--------------------------------------------------------------------+
+#define EPNUM_AUDIO_OUT    0x01
+#define EPNUM_AUDIO_IN     0x02
+#define EPNUM_HID_IN       0x03
+
+#define AUDIO10_DESC_LEN   TUD_AUDIO10_HEADSET_STEREO_DESC_LEN(1)
+#define HID_DESC_LEN       TUD_HID_DESC_LEN
+#define CONFIG_TOTAL_LEN   (TUD_CONFIG_DESC_LEN + AUDIO10_DESC_LEN + HID_DESC_LEN)
+
 uint8_t const desc_configuration[] =
 {
-    0x09, 0x02, USB_AUDIO_PNP_DESC_LEN & 0xff, USB_AUDIO_PNP_DESC_LEN >> 8,
-    ITF_NUM_TOTAL, 0x01, 0x00, 0x80, 0x32,
+    // Config number, interface count, string index, total length, attributes, power in mA
+    TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
 
-    // Interface 0, Audio Control, UAC1
-    0x09, 0x04, ITF_NUM_AUDIO_CONTROL, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00,
-    0x0A, 0x24, 0x01, 0x00, 0x01, 0x64, 0x00, 0x02,
-      ITF_NUM_AUDIO_STREAMING_SPK, ITF_NUM_AUDIO_STREAMING_MIC,
-    0x0C, 0x24, 0x02, UAC1_ENTITY_USB_OUT_INPUT_TERMINAL,
-      0x01, 0x01, 0x00, USB_AUDIO_SPK_CHANNELS, 0x03, 0x00, 0x00, 0x00,
-    0x0C, 0x24, 0x02, UAC1_ENTITY_MIC_INPUT_TERMINAL,
-      0x01, 0x02, 0x00, USB_AUDIO_MIC_CHANNELS, 0x00, 0x00, 0x00, 0x00,
-    0x09, 0x24, 0x03, UAC1_ENTITY_SPK_OUTPUT_TERMINAL,
-      0x01, 0x03, 0x00, UAC1_ENTITY_SPK_FEATURE_UNIT, 0x00,
-    0x09, 0x24, 0x03, UAC1_ENTITY_USB_IN_OUTPUT_TERMINAL,
-      0x01, 0x01, 0x02, UAC1_ENTITY_SELECTOR_UNIT, 0x00,
-    0x07, 0x24, 0x05, UAC1_ENTITY_SELECTOR_UNIT,
-      0x01, UAC1_ENTITY_MIC_FEATURE_UNIT_1, 0x00,
-    0x0A, 0x24, 0x06, UAC1_ENTITY_SPK_FEATURE_UNIT,
-      UAC1_ENTITY_MIXER_UNIT, 0x01, 0x01, 0x02, 0x02, 0x00,
-    0x09, 0x24, 0x06, UAC1_ENTITY_MIC_FEATURE_UNIT_1,
-      UAC1_ENTITY_MIC_INPUT_TERMINAL, 0x01, 0x03, 0x00, 0x00,
-    0x09, 0x24, 0x06, UAC1_ENTITY_MIC_FEATURE_UNIT_2,
-      UAC1_ENTITY_MIC_INPUT_TERMINAL, 0x01, 0x03, 0x00, 0x00,
-    0x0D, 0x24, 0x04, UAC1_ENTITY_MIXER_UNIT,
-      0x02, UAC1_ENTITY_USB_OUT_INPUT_TERMINAL, UAC1_ENTITY_MIC_FEATURE_UNIT_2,
-      0x02, 0x03, 0x00, 0x00, 0x00, 0x00,
+    // Official TinyUSB UAC1 headset descriptor: speaker OUT + microphone IN.
+    TUD_AUDIO10_HEADSET_STEREO_DESCRIPTOR(
+        ITF_NUM_AUDIO_CONTROL,
+        0x01,
+        CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX,
+        CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_RESOLUTION_RX,
+        CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_TX,
+        CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_RESOLUTION_TX,
+        EPNUM_AUDIO_OUT,
+        CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_EP_SZ_OUT,
+        0x80 | EPNUM_AUDIO_IN,
+        CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_EP_SZ_IN,
+        USB_AUDIO_SAMPLE_RATE),
 
-    // Interface 1, speaker/playback, host OUT -> Pico
-    0x09, 0x04, ITF_NUM_AUDIO_STREAMING_SPK, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00,
-    0x09, 0x04, ITF_NUM_AUDIO_STREAMING_SPK, 0x01, 0x01, 0x01, 0x02, 0x00, 0x00,
-    0x07, 0x24, 0x01, UAC1_ENTITY_USB_OUT_INPUT_TERMINAL, 0x01, 0x01, 0x00,
-    0x0B, 0x24, 0x02, 0x01, USB_AUDIO_SPK_CHANNELS,
-      USB_AUDIO_BYTES_PER_SAMPLE, USB_AUDIO_RESOLUTION_BITS, 0x01, 0x80, 0xBB, 0x00,
-    0x09, 0x05, 0x01, 0x09, USB_AUDIO_ISO_EP_SIZE & 0xff,
-      USB_AUDIO_ISO_EP_SIZE >> 8, 0x01, 0x00, 0x00,
-    0x07, 0x25, 0x01, 0x01, 0x01, 0x01, 0x00,
-
-    // Interface 2, microphone, Pico IN -> host. This starts as silence.
-    0x09, 0x04, ITF_NUM_AUDIO_STREAMING_MIC, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00,
-    0x09, 0x04, ITF_NUM_AUDIO_STREAMING_MIC, 0x01, 0x01, 0x01, 0x02, 0x00, 0x00,
-    0x07, 0x24, 0x01, UAC1_ENTITY_USB_IN_OUTPUT_TERMINAL, 0x01, 0x01, 0x00,
-    0x0B, 0x24, 0x02, 0x01, USB_AUDIO_MIC_CHANNELS,
-      USB_AUDIO_BYTES_PER_SAMPLE, USB_AUDIO_RESOLUTION_BITS, 0x01, 0x80, 0xBB, 0x00,
-    0x09, 0x05, 0x82, 0x05, USB_AUDIO_ISO_EP_SIZE & 0xff,
-      USB_AUDIO_ISO_EP_SIZE >> 8, 0x01, 0x00, 0x00,
-    0x07, 0x25, 0x01, 0x01, 0x00, 0x00, 0x00,
-
-    // Interface 3, HID media keys. The original PnP adapter exposes this.
-    0x09, 0x04, ITF_NUM_HID, 0x00, 0x01, 0x03, 0x00, 0x00, 0x00,
-    0x09, 0x21, 0x00, 0x01, 0x00, 0x01, 0x22,
-      USB_HID_REPORT_DESC_LEN & 0xff, USB_HID_REPORT_DESC_LEN >> 8,
-    0x07, 0x05, 0x83, 0x03, USB_HID_EP_SIZE, 0x00, USB_HID_EP_INTERVAL
+    // HID consumer-control interface, same endpoint style as common USB headsets.
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID, 0x00, HID_ITF_PROTOCOL_NONE,
+        USB_HID_REPORT_DESC_LEN, 0x80 | EPNUM_HID_IN,
+        USB_HID_EP_SIZE, USB_HID_EP_INTERVAL)
 };
 
-TU_VERIFY_STATIC(sizeof(desc_configuration) == USB_AUDIO_PNP_DESC_LEN,
-                 "USB audio configuration descriptor length mismatch");
+TU_VERIFY_STATIC(sizeof(desc_configuration) == CONFIG_TOTAL_LEN,
+                 "USB configuration descriptor length mismatch");
 
 uint8_t const * tud_descriptor_configuration_cb(uint8_t index)
 {
@@ -156,6 +130,6 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
     }
   }
 
-  _desc_str[0] = (uint16_t) ((TUSB_DESC_STRING << 8) | (2 * chr_count + 2));
+  _desc_str[0] = (uint16_t)((TUSB_DESC_STRING << 8) | (2 * chr_count + 2));
   return _desc_str;
 }

@@ -107,10 +107,10 @@ extern "C" {
 // AUDIO CLASS DRIVER CONFIGURATION
 //--------------------------------------------------------------------
 
-// The cloned USB PnP profile uses UAC1 controls and no AudioControl interrupt EP.
+// The PS5 path uses USB Audio Class 1.0 (TinyUSB audio10).
 #define CFG_TUD_AUDIO_ENABLE_INTERRUPT_EP                            0
 
-#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN                                USB_AUDIO_PNP_FUNC_DESC_LEN
+#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN                                TUD_AUDIO10_HEADSET_STEREO_DESC_LEN(1)
 
 // How many formats are used, need to adjust USB descriptor if changed
 #define CFG_TUD_AUDIO_FUNC_1_N_FORMATS                               1
@@ -127,6 +127,11 @@ extern "C" {
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_TX                  USB_AUDIO_RESOLUTION_BITS
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX          USB_AUDIO_BYTES_PER_SAMPLE
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX                  USB_AUDIO_RESOLUTION_BITS
+
+#define CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_TX        USB_AUDIO_BYTES_PER_SAMPLE
+#define CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_RESOLUTION_TX                USB_AUDIO_RESOLUTION_BITS
+#define CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX        USB_AUDIO_BYTES_PER_SAMPLE
+#define CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_RESOLUTION_RX                USB_AUDIO_RESOLUTION_BITS
 
 #if defined(__RX__)
 // 8bit in 8bit slots
@@ -146,20 +151,22 @@ extern "C" {
 // EP and buffer size - for isochronous EP´s, the buffer and EP size are equal (different sizes would not make sense)
 #define CFG_TUD_AUDIO_ENABLE_EP_IN                1
 
-#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_IN    USB_AUDIO_ISO_EP_SIZE
-#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_SZ_IN    USB_AUDIO_ISO_EP_SIZE
+#define CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_EP_SZ_IN  USB_AUDIO_MIC_PACKET_BYTES
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_IN    USB_AUDIO_MIC_PACKET_BYTES
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_SZ_IN    USB_AUDIO_MIC_PACKET_BYTES
 
-#define CFG_TUD_AUDIO_FUNC_1_EP_IN_SW_BUF_SZ      (USB_AUDIO_ISO_EP_SIZE * 4)
-#define CFG_TUD_AUDIO_FUNC_1_EP_IN_SZ_MAX         USB_AUDIO_ISO_EP_SIZE
+#define CFG_TUD_AUDIO_FUNC_1_EP_IN_SW_BUF_SZ      (USB_AUDIO_MIC_PACKET_BYTES * 4)
+#define CFG_TUD_AUDIO_FUNC_1_EP_IN_SZ_MAX         USB_AUDIO_MIC_PACKET_BYTES
 
 // EP and buffer size - for isochronous EP´s, the buffer and EP size are equal (different sizes would not make sense)
 #define CFG_TUD_AUDIO_ENABLE_EP_OUT               1
 
-#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_OUT   USB_AUDIO_ISO_EP_SIZE
-#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_SZ_OUT   USB_AUDIO_ISO_EP_SIZE
+#define CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_EP_SZ_OUT USB_AUDIO_SPK_PACKET_BYTES
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_OUT   USB_AUDIO_SPK_PACKET_BYTES
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_SZ_OUT   USB_AUDIO_SPK_PACKET_BYTES
 
-#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ     (USB_AUDIO_ISO_EP_SIZE * 4)
-#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX        USB_AUDIO_ISO_EP_SIZE
+#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ     (USB_AUDIO_SPK_PACKET_BYTES * 4)
+#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX        USB_AUDIO_SPK_PACKET_BYTES
 
 // Number of Standard AS Interface Descriptors (4.9.1) defined per audio function - this is required to be able to remember the current alternate settings of these interfaces - We restrict us here to have a constant number for all audio functions (which means this has to be the maximum number of AS interfaces an audio function has and a second audio function with less AS interfaces just wastes a few bytes)
 #define CFG_TUD_AUDIO_FUNC_1_N_AS_INT 	          2

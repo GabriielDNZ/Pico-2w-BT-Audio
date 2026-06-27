@@ -402,8 +402,7 @@ void tinyusb_control_task(void){
 
  static bool uac1_is_mic_feature_unit(uint8_t entity)
  {
-   return entity == UAC1_ENTITY_MIC_FEATURE_UNIT_1 ||
-          entity == UAC1_ENTITY_MIC_FEATURE_UNIT_2;
+   return entity == UAC1_ENTITY_MIC_FEATURE_UNIT;
  }
 
  static uint8_t uac1_clamp_channel(uint8_t channel, uint8_t max_channels)
