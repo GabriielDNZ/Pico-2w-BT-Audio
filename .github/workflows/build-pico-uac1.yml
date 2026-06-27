@@ -10,26 +10,40 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Força compilação para Pico 2 W (pode usar pico_2w se preferir)
+      PICO_BOARD: pico_w
+      # Faz o CMake baixar automaticamente o pico-sdk se não existir
+      PICO_SDK_FETCH_FROM_GIT: 1
 
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
+      # Dependências de compilação do RP2040
       - name: Instalar dependências
         run: |
           sudo apt update
           sudo apt install -y gcc-arm-none-eabi libnewlib-arm-none-eabi cmake ninja-build python3-pip build-essential
 
-      - name: Compilar firmware UAC1
+      # Configura e baixa pico-sdk
+      - name: Configurar CMake
         run: |
           mkdir -p build
           cd build
-          cmake .. -DPICO_BOARD=pico_w -DCMAKE_BUILD_TYPE=Release
+          cmake .. \
+            -DPICO_BOARD=$PICO_BOARD \
+            -DPICO_SDK_FETCH_FROM_GIT=$PICO_SDK_FETCH_FROM_GIT \
+            -DCMAKE_BUILD_TYPE=Release
+
+      # Compilação propiamente dita
+      - name: Compilar firmware
+        run: |
+          cd build
           cmake --build . --parallel
 
-      - name: Publicar .uf2
+      # Publica o artefato .uf2
+      - name: Publicar UF2
         uses: actions/upload-artifact@v4
         with:
           name: pico2w-uac1-uf2
