@@ -1,9 +1,3 @@
-
-# === UAC1 SBC-only build options ===
-option(ENABLE_FDK_AAC "FDK AAC codec" OFF)
-option(ENABLE_LDAC "LDAC codec" OFF)
-option(ENABLE_SAC "MPEG SAC codec" OFF)
-
 # Generated Cmake Pico project file
 
 cmake_minimum_required(VERSION 3.13)
