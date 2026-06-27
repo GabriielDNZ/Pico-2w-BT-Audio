@@ -10,23 +10,33 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Compila para Pico 2 W; troque para pico_2w se quiser forçar
+      PICO_BOARD: pico_w
+      # Faz o CMake baixar automaticamente o pico-sdk
+      PICO_SDK_FETCH_FROM_GIT: 1
 
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Instalar dependências
         run: |
           sudo apt update
           sudo apt install -y gcc-arm-none-eabi libnewlib-arm-none-eabi cmake ninja-build python3-pip build-essential
 
-      - name: Compilar firmware UAC1
+      - name: Configurar CMake
         run: |
           mkdir -p build
           cd build
-          cmake .. -DPICO_BOARD=pico_w -DCMAKE_BUILD_TYPE=Release
+          cmake .. \
+            -DPICO_BOARD=$PICO_BOARD \
+            -DPICO_SDK_FETCH_FROM_GIT=1 \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Compilar
+        run: |
+          cd build
           cmake --build . --parallel
 
       - name: Publicar .uf2
