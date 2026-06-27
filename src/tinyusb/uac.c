@@ -61,6 +61,7 @@
    int16_t bCur;
  } audio10_control_cur_2_t;
 
+#if CFG_TUD_HID
  static uint8_t const desc_hid_report[] =
  {
    0x05, 0x0C, 0x09, 0x01, 0xA1, 0x01, 0x85, 0x01,
@@ -75,6 +76,7 @@
 
  TU_VERIFY_STATIC(sizeof(desc_hid_report) == USB_HID_REPORT_DESC_LEN,
                   "USB HID report descriptor length mismatch");
+#endif
 
 
  
@@ -216,6 +218,7 @@ void tinyusb_control_task(void){
   printf("tud_resume_cb\n");
  }
 
+#if CFG_TUD_HID
  uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance)
  {
    (void)instance;
@@ -244,6 +247,7 @@ void tinyusb_control_task(void){
    (void)buffer;
    (void)bufsize;
  }
+#endif
  
  // Helper for clock get requests
  static bool tud_audio_clock_get_request(uint8_t rhport, audio_control_request_t const *request)

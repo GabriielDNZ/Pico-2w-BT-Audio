@@ -42,11 +42,9 @@ uint8_t const * tud_descriptor_device_cb(void)
 //--------------------------------------------------------------------+
 #define EPNUM_AUDIO_OUT    0x01
 #define EPNUM_AUDIO_IN     0x02
-#define EPNUM_HID_IN       0x03
 
 #define AUDIO10_DESC_LEN   184
-#define HID_DESC_LEN       TUD_HID_DESC_LEN
-#define CONFIG_TOTAL_LEN   (TUD_CONFIG_DESC_LEN + AUDIO10_DESC_LEN + HID_DESC_LEN)
+#define CONFIG_TOTAL_LEN   (TUD_CONFIG_DESC_LEN + AUDIO10_DESC_LEN)
 
 uint8_t const desc_configuration[] =
 {
@@ -88,12 +86,7 @@ uint8_t const desc_configuration[] =
       USB_AUDIO_BYTES_PER_SAMPLE, USB_AUDIO_RESOLUTION_BITS, 0x01, 0x80, 0xBB, 0x00,
     0x09, 0x05, 0x80 | EPNUM_AUDIO_IN, 0x05,
       USB_AUDIO_MIC_PACKET_BYTES & 0xff, USB_AUDIO_MIC_PACKET_BYTES >> 8, 0x01, 0x00, 0x00,
-    0x07, 0x25, 0x01, 0x01, 0x00, 0x00, 0x00,
-
-    // HID consumer-control interface, same endpoint style as common USB headsets.
-    TUD_HID_DESCRIPTOR(ITF_NUM_HID, 0x00, HID_ITF_PROTOCOL_NONE,
-        USB_HID_REPORT_DESC_LEN, 0x80 | EPNUM_HID_IN,
-        USB_HID_EP_SIZE, USB_HID_EP_INTERVAL)
+    0x07, 0x25, 0x01, 0x01, 0x00, 0x00, 0x00
 };
 
 TU_VERIFY_STATIC(sizeof(desc_configuration) == CONFIG_TOTAL_LEN,
