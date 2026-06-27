@@ -33,49 +33,6 @@
  #include "../btstack/btstack_avdtp_source.h"
  #include "pico/flash.h"
 
-#define UAC2_ENTITY_CLOCK 0xff
-#define UAC2_ENTITY_SPK_FEATURE_UNIT UAC1_ENTITY_SPK_FEATURE_UNIT
-
-#define AUDIO10_CS_REQ_SET_CUR 0x01
-#define AUDIO10_CS_REQ_GET_CUR 0x81
-#define AUDIO10_CS_REQ_GET_MIN 0x82
-#define AUDIO10_CS_REQ_GET_MAX 0x83
-#define AUDIO10_CS_REQ_GET_RES 0x84
-
-#define AUDIO10_FU_CTRL_MUTE   0x01
-#define AUDIO10_FU_CTRL_VOLUME 0x02
-#define AUDIO10_EP_CTRL_SAMPLING_FREQ 0x01
-
-#define UAC_REQ_ENTITY_ID(_request)  ((uint8_t)((tu_le16toh((_request)->wIndex) >> 8) & 0xff))
-#define UAC_REQ_ENDPOINT(_request)   ((uint8_t)(tu_le16toh((_request)->wIndex) & 0xff))
-#define UAC_REQ_CONTROL(_request)    ((uint8_t)((tu_le16toh((_request)->wValue) >> 8) & 0xff))
-#define UAC_REQ_CHANNEL(_request)    ((uint8_t)(tu_le16toh((_request)->wValue) & 0xff))
-
- typedef struct TU_ATTR_PACKED
- {
-   uint8_t bCur[3];
- } audio10_control_cur_3_t;
-
- typedef struct TU_ATTR_PACKED
- {
-   int16_t bCur;
- } audio10_control_cur_2_t;
-
- static uint8_t const desc_hid_report[] =
- {
-   0x05, 0x0C, 0x09, 0x01, 0xA1, 0x01, 0x85, 0x01,
-   0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x10,
-   0x09, 0xB5, 0x09, 0xB6, 0x09, 0xB7, 0x09, 0xCD,
-   0x09, 0xE2, 0x09, 0xE9, 0x09, 0xEA, 0x0A, 0x23,
-   0x02, 0x0A, 0x24, 0x02, 0x0A, 0x25, 0x02, 0x0A,
-   0x21, 0x02, 0x0A, 0x8A, 0x01, 0x0A, 0x92, 0x01,
-   0x0A, 0x94, 0x01, 0x09, 0xB0, 0x81, 0x02, 0x95,
-   0x01, 0x75, 0x08, 0x81, 0x01, 0xC0
- };
-
- TU_VERIFY_STATIC(sizeof(desc_hid_report) == USB_HID_REPORT_DESC_LEN,
-                  "USB HID report descriptor length mismatch");
-
 
  
  //--------------------------------------------------------------------+
@@ -134,19 +91,16 @@
  int16_t volume0_last = 0;
  int8_t mute0_last = 0; 
 
- int8_t mic_mute[CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX + 1];
- int16_t mic_volume[CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX + 1];
- bool is_usb_mic_running = false;
-
  // Buffer for microphone data
- int16_t mic_silence[USB_AUDIO_MIC_PACKET_BYTES / sizeof(int16_t)];
+ //int32_t mic_buf[CFG_TUD_AUDIO_FUNC_1_EP_IN_SW_BUF_SZ / 4];
 
  // Buffer for speaker data
  int32_t spk_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ / 4];
  // Speaker data size received in the last frame
  int spk_data_size;
  // Resolution per format
- const uint8_t resolutions_per_format[CFG_TUD_AUDIO_FUNC_1_N_FORMATS] = {CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX};
+ const uint8_t resolutions_per_format[CFG_TUD_AUDIO_FUNC_1_N_FORMATS] = {CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX,
+                                                                         CFG_TUD_AUDIO_FUNC_1_FORMAT_2_RESOLUTION_RX};
  // Current resolution, update on format change
  uint8_t current_resolution;
  
@@ -214,35 +168,6 @@ void tinyusb_control_task(void){
  void tud_resume_cb(void)
  {
   printf("tud_resume_cb\n");
- }
-
- uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance)
- {
-   (void)instance;
-   return desc_hid_report;
- }
-
- uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
-                                hid_report_type_t report_type, uint8_t *buffer,
-                                uint16_t reqlen)
- {
-   (void)instance;
-   (void)report_id;
-   (void)report_type;
-   (void)buffer;
-   (void)reqlen;
-   return 0;
- }
-
- void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
-                            hid_report_type_t report_type, uint8_t const *buffer,
-                            uint16_t bufsize)
- {
-   (void)instance;
-   (void)report_id;
-   (void)report_type;
-   (void)buffer;
-   (void)bufsize;
  }
  
  // Helper for clock get requests
@@ -394,200 +319,6 @@ void tinyusb_control_task(void){
      return false;
    }
  }
-
- static bool uac1_is_speaker_feature_unit(uint8_t entity)
- {
-   return entity == UAC1_ENTITY_SPK_FEATURE_UNIT;
- }
-
- static bool uac1_is_mic_feature_unit(uint8_t entity)
- {
-   return entity == UAC1_ENTITY_MIC_FEATURE_UNIT;
- }
-
- static uint8_t uac1_clamp_channel(uint8_t channel, uint8_t max_channels)
- {
-   return channel > max_channels ? 0 : channel;
- }
-
- static bool uac1_get_feature_unit_request(uint8_t rhport, tusb_control_request_t const *p_request)
- {
-   uint8_t const entity = UAC_REQ_ENTITY_ID(p_request);
-   uint8_t const control = UAC_REQ_CONTROL(p_request);
-   uint8_t const request = p_request->bRequest;
-
-   if (!uac1_is_speaker_feature_unit(entity) && !uac1_is_mic_feature_unit(entity))
-   {
-     return false;
-   }
-
-   int8_t *mute_state = mute;
-   int16_t *volume_state = volume;
-   uint8_t max_channels = CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX;
-
-   if (uac1_is_mic_feature_unit(entity))
-   {
-     mute_state = mic_mute;
-     volume_state = mic_volume;
-     max_channels = CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX;
-   }
-
-   uint8_t const channel = uac1_clamp_channel(UAC_REQ_CHANNEL(p_request), max_channels);
-
-   if (control == AUDIO10_FU_CTRL_MUTE)
-   {
-     if (request == AUDIO10_CS_REQ_GET_CUR)
-     {
-       audio_control_cur_1_t cur_mute = { .bCur = mute_state[channel] };
-       return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &cur_mute, sizeof(cur_mute));
-     }
-   }
-   else if (control == AUDIO10_FU_CTRL_VOLUME)
-   {
-     audio10_control_cur_2_t value;
-
-     if (request == AUDIO10_CS_REQ_GET_CUR)
-     {
-       value.bCur = tu_htole16(volume_state[channel]);
-     }
-     else if (request == AUDIO10_CS_REQ_GET_MIN)
-     {
-       value.bCur = tu_htole16(-VOLUME_CTRL_50_DB);
-     }
-     else if (request == AUDIO10_CS_REQ_GET_MAX)
-     {
-       value.bCur = tu_htole16(VOLUME_CTRL_0_DB);
-     }
-     else if (request == AUDIO10_CS_REQ_GET_RES)
-     {
-       value.bCur = tu_htole16(256);
-     }
-     else
-     {
-       return false;
-     }
-
-     return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &value, sizeof(value));
-   }
-
-   return false;
- }
-
- static bool uac1_set_feature_unit_request(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t const *buf)
- {
-   (void)rhport;
-
-   uint8_t const entity = UAC_REQ_ENTITY_ID(p_request);
-   uint8_t const control = UAC_REQ_CONTROL(p_request);
-
-   if (p_request->bRequest != AUDIO10_CS_REQ_SET_CUR ||
-       (!uac1_is_speaker_feature_unit(entity) && !uac1_is_mic_feature_unit(entity)))
-   {
-     return false;
-   }
-
-   int8_t *mute_state = mute;
-   int16_t *volume_state = volume;
-   uint8_t max_channels = CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX;
-   bool const is_speaker = uac1_is_speaker_feature_unit(entity);
-
-   if (!is_speaker)
-   {
-     mute_state = mic_mute;
-     volume_state = mic_volume;
-     max_channels = CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX;
-   }
-
-   uint8_t const channel = uac1_clamp_channel(UAC_REQ_CHANNEL(p_request), max_channels);
-
-   if (control == AUDIO10_FU_CTRL_MUTE)
-   {
-     TU_VERIFY(p_request->wLength == sizeof(audio_control_cur_1_t));
-     mute_state[channel] = ((audio_control_cur_1_t const *)buf)->bCur;
-   }
-   else if (control == AUDIO10_FU_CTRL_VOLUME)
-   {
-     TU_VERIFY(p_request->wLength == sizeof(audio10_control_cur_2_t));
-     volume_state[channel] = (int16_t) tu_le16toh(((audio10_control_cur_2_t const *)buf)->bCur);
-   }
-   else
-   {
-     return false;
-   }
-
-   if (is_speaker)
-   {
-     if (channel != 0)
-     {
-       volume[0] = volume_state[channel];
-       mute[0] = mute_state[channel];
-     }
-     need_change_bt_volume = true;
-   }
-
-   return true;
- }
-
- static void uac1_fill_sample_freq(uint8_t sample_freq[3], uint32_t freq)
- {
-   sample_freq[0] = (uint8_t)(freq & 0xff);
-   sample_freq[1] = (uint8_t)((freq >> 8) & 0xff);
-   sample_freq[2] = (uint8_t)((freq >> 16) & 0xff);
- }
-
- static bool uac1_get_endpoint_request(uint8_t rhport, tusb_control_request_t const *p_request)
- {
-   uint8_t const ep = UAC_REQ_ENDPOINT(p_request);
-   uint8_t const control = UAC_REQ_CONTROL(p_request);
-   uint8_t const request = p_request->bRequest;
-
-   if ((ep != 0x01 && ep != 0x82) || control != AUDIO10_EP_CTRL_SAMPLING_FREQ)
-   {
-     return false;
-   }
-
-   audio10_control_cur_3_t freq = { 0 };
-   if (request == AUDIO10_CS_REQ_GET_CUR ||
-       request == AUDIO10_CS_REQ_GET_MIN ||
-       request == AUDIO10_CS_REQ_GET_MAX)
-   {
-     uac1_fill_sample_freq(freq.bCur, current_sample_rate);
-   }
-   else if (request != AUDIO10_CS_REQ_GET_RES)
-   {
-     return false;
-   }
-
-   return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &freq, sizeof(freq));
- }
-
- static bool uac1_set_endpoint_request(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t const *buf)
- {
-   (void)rhport;
-
-   uint8_t const ep = UAC_REQ_ENDPOINT(p_request);
-   uint8_t const control = UAC_REQ_CONTROL(p_request);
-
-   if ((ep != 0x01 && ep != 0x82) ||
-       control != AUDIO10_EP_CTRL_SAMPLING_FREQ ||
-       p_request->bRequest != AUDIO10_CS_REQ_SET_CUR ||
-       p_request->wLength != sizeof(audio10_control_cur_3_t))
-   {
-     return false;
-   }
-
-   audio10_control_cur_3_t const *freq = (audio10_control_cur_3_t const *)buf;
-   current_sample_rate = (uint32_t)freq->bCur[0] |
-                         ((uint32_t)freq->bCur[1] << 8) |
-                         ((uint32_t)freq->bCur[2] << 16);
-
-   if (current_sample_rate != USB_AUDIO_SAMPLE_RATE)
-   {
-     current_sample_rate = USB_AUDIO_SAMPLE_RATE;
-   }
-
-   return true;
- }
  
  //--------------------------------------------------------------------+
  // Application Callback API Implementations
@@ -596,23 +327,33 @@ void tinyusb_control_task(void){
  // Invoked when audio class specific get request received for an entity
  bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request)
  {
-   return uac1_get_feature_unit_request(rhport, p_request);
+   audio_control_request_t const *request = (audio_control_request_t const *)p_request;
+ 
+   if (request->bEntityID == UAC2_ENTITY_CLOCK)
+     return tud_audio_clock_get_request(rhport, request);
+   if (request->bEntityID == UAC2_ENTITY_SPK_FEATURE_UNIT)
+     return tud_audio_feature_unit_get_request(rhport, request);
+   else
+   {
+     TU_LOG1("Get request not handled, entity = %d, selector = %d, request = %d\r\n",
+             request->bEntityID, request->bControlSelector, request->bRequest);
+   }
+   return false;
  }
  
  // Invoked when audio class specific set request received for an entity
  bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *buf)
  {
-   return uac1_set_feature_unit_request(rhport, p_request, buf);
- }
-
- bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request)
- {
-   return uac1_get_endpoint_request(rhport, p_request);
- }
-
- bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *buf)
- {
-   return uac1_set_endpoint_request(rhport, p_request, buf);
+   audio_control_request_t const *request = (audio_control_request_t const *)p_request;
+ 
+   if (request->bEntityID == UAC2_ENTITY_SPK_FEATURE_UNIT)
+     return tud_audio_feature_unit_set_request(rhport, request, buf);
+   if (request->bEntityID == UAC2_ENTITY_CLOCK)
+     return tud_audio_clock_set_request(rhport, request, buf);
+   TU_LOG1("Set request not handled, entity = %d, selector = %d, request = %d\r\n",
+           request->bEntityID, request->bControlSelector, request->bRequest);
+ 
+   return false;
  }
  
  bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const * p_request)
@@ -624,9 +365,6 @@ void tinyusb_control_task(void){
  
    if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt == 0)
        blink_interval_ms = BLINK_MOUNTED;
-
-   if (ITF_NUM_AUDIO_STREAMING_MIC == itf && alt == 0)
-       is_usb_mic_running = false;
  
    return true;
  }
@@ -640,13 +378,10 @@ void tinyusb_control_task(void){
    TU_LOG2("Set interface %d alt %d\r\n", itf, alt);
    if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt != 0)
        blink_interval_ms = BLINK_STREAMING;
-
-   if (ITF_NUM_AUDIO_STREAMING_MIC == itf)
-       is_usb_mic_running = alt != 0;
  
    // Clear buffer when streaming format is changed
    spk_data_size = 0;
-   if(ITF_NUM_AUDIO_STREAMING_SPK == itf && alt != 0)
+   if(alt != 0)
    {
      current_resolution = resolutions_per_format[alt-1];
    }
@@ -681,31 +416,20 @@ void tinyusb_control_task(void){
       spk_data_size = 0;
     }
    } 
- 
-   return true;
- }
-
- static void queue_mic_silence(void)
- {
-   if (is_usb_mic_running)
-   {
-     tud_audio_write(mic_silence, sizeof(mic_silence));
-   }
- }
- 
- bool tud_audio_tx_done_pre_load_cb(uint8_t rhport, uint8_t itf, uint8_t ep_in, uint8_t cur_alt_setting)
- {
-   (void)rhport;
-   (void)ep_in;
-   (void)cur_alt_setting;
-
-   if (itf == ITF_NUM_AUDIO_STREAMING_MIC)
-   {
-     queue_mic_silence();
-   }
 
    return true;
  }
+ 
+//  bool tud_audio_tx_done_pre_load_cb(uint8_t rhport, uint8_t itf, uint8_t ep_in, uint8_t cur_alt_setting)
+//  {
+//    (void)rhport;
+//    (void)itf;
+//    (void)ep_in;
+//    (void)cur_alt_setting;
+ 
+//    // This callback could be used to fill microphone data separately
+//    return true;
+//  }
  
  //--------------------------------------------------------------------+
  // AUDIO Task
@@ -714,8 +438,6 @@ void tinyusb_control_task(void){
 
  void audio_task(void)
  {
-  queue_mic_silence();
-
   if (is_usb_audio_running){
     usb_stop_delay = 0;
   }else{
@@ -750,7 +472,6 @@ void audio_control_task(void)
     // 3) store into USB-Audio’s volume (attenuation) field
     volume[0] = -1 * usb_level / 2;
 
-#if CFG_TUD_AUDIO_ENABLE_INTERRUPT_EP
      // 6.1 Interrupt Data Message
      const audio_interrupt_data_t data = {
        .bInfo = 0,                                       // Class-specific interrupt, originated from an interface
@@ -762,7 +483,6 @@ void audio_control_task(void)
      };
  
      tud_audio_int_write(&data);
-#endif
      *get_is_bt_sink_volume_changed_ptr() = false;
    }
 
@@ -785,7 +505,6 @@ void audio_control_task(void)
     volume0_last = volume[0];
     need_change_bt_volume = false;
 
-#if CFG_TUD_AUDIO_ENABLE_INTERRUPT_EP
     const audio_interrupt_data_t data = {
       .bInfo = 0,                                       // Class-specific interrupt, originated from an interface
       .bAttribute = AUDIO_CS_REQ_CUR,                   // Caused by current settings
@@ -796,7 +515,6 @@ void audio_control_task(void)
     };
 
     tud_audio_int_write(&data);
-#endif
     //*get_is_bt_sink_volume_changed_ptr() = false;
    }
 
