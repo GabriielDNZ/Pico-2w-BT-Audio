@@ -1,0 +1,180 @@
+/*
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2020 Ha Thach (tinyusb.org)
+ * Copyright (c) 2020 Jerzy Kasenberg
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
+#ifndef _TUSB_CONFIG_H_
+#define _TUSB_CONFIG_H_
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "src/tinyusb/usb_descriptors.h"
+
+//--------------------------------------------------------------------+
+// Board Specific Configuration
+//--------------------------------------------------------------------+
+
+// RHPort number used for device can be defined by board.mk, default to port 0
+#ifndef BOARD_TUD_RHPORT
+#define BOARD_TUD_RHPORT      0
+#endif
+
+// RHPort max operational speed can defined by board.mk
+#ifndef BOARD_TUD_MAX_SPEED
+#define BOARD_TUD_MAX_SPEED   OPT_MODE_DEFAULT_SPEED
+#endif
+
+//--------------------------------------------------------------------
+// Common Configuration
+//--------------------------------------------------------------------
+
+// defined by compiler flags for flexibility
+#ifndef CFG_TUSB_MCU
+#error CFG_TUSB_MCU must be defined
+#endif
+
+#ifndef CFG_TUSB_OS
+#define CFG_TUSB_OS           OPT_OS_NONE
+#endif
+
+#ifndef CFG_TUSB_DEBUG
+#define CFG_TUSB_DEBUG        1
+#endif
+
+// Enable Device stack
+#define CFG_TUD_ENABLED       1
+
+#define CFG_TUD_TASK_QUEUE_SZ 64
+
+// Default is max speed that hardware controller could support with on-chip PHY
+#define CFG_TUD_MAX_SPEED     BOARD_TUD_MAX_SPEED
+
+/* USB DMA on some MCUs can only access a specific SRAM region with restriction on alignment.
+ * Tinyusb use follows macros to declare transferring memory so that they can be put
+ * into those specific section.
+ * e.g
+ * - CFG_TUSB_MEM SECTION : __attribute__ (( section(".usb_ram") ))
+ * - CFG_TUSB_MEM_ALIGN   : __attribute__ ((aligned(4)))
+ */
+#ifndef CFG_TUSB_MEM_SECTION
+#define CFG_TUSB_MEM_SECTION
+#endif
+
+#ifndef CFG_TUSB_MEM_ALIGN
+#define CFG_TUSB_MEM_ALIGN        __attribute__ ((aligned(4)))
+#endif
+
+//--------------------------------------------------------------------
+// DEVICE CONFIGURATION
+//--------------------------------------------------------------------
+
+#ifndef CFG_TUD_ENDPOINT0_SIZE
+#define CFG_TUD_ENDPOINT0_SIZE    64
+#endif
+
+//------------- CLASS -------------//
+#define CFG_TUD_CDC               0
+#define CFG_TUD_MSC               0
+#define CFG_TUD_HID               1
+#define CFG_TUD_MIDI              0
+#define CFG_TUD_AUDIO             1
+#define CFG_TUD_VENDOR            0
+
+//--------------------------------------------------------------------
+// AUDIO CLASS DRIVER CONFIGURATION
+//--------------------------------------------------------------------
+
+// The cloned USB PnP profile uses UAC1 controls and no AudioControl interrupt EP.
+#define CFG_TUD_AUDIO_ENABLE_INTERRUPT_EP                            0
+
+#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN                                USB_AUDIO_PNP_FUNC_DESC_LEN
+
+// How many formats are used, need to adjust USB descriptor if changed
+#define CFG_TUD_AUDIO_FUNC_1_N_FORMATS                               1
+
+// Audio format type I specifications
+/* 24bit/48kHz is the best quality for headset or 24bit/96kHz for 2ch speaker,
+   high-speed is needed beyond this */
+#define CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE                         USB_AUDIO_SAMPLE_RATE
+#define CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX                           USB_AUDIO_MIC_CHANNELS
+#define CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX                           USB_AUDIO_SPK_CHANNELS
+
+// 16bit in 16bit slots
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_TX          USB_AUDIO_BYTES_PER_SAMPLE
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_TX                  USB_AUDIO_RESOLUTION_BITS
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX          USB_AUDIO_BYTES_PER_SAMPLE
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX                  USB_AUDIO_RESOLUTION_BITS
+
+#if defined(__RX__)
+// 8bit in 8bit slots
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_N_BYTES_PER_SAMPLE_TX          USB_AUDIO_BYTES_PER_SAMPLE
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_RESOLUTION_TX                  USB_AUDIO_RESOLUTION_BITS
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_N_BYTES_PER_SAMPLE_RX          USB_AUDIO_BYTES_PER_SAMPLE
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_RESOLUTION_RX                  USB_AUDIO_RESOLUTION_BITS
+#else
+// 24bit in 32bit slots
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_N_BYTES_PER_SAMPLE_TX          USB_AUDIO_BYTES_PER_SAMPLE
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_RESOLUTION_TX                  USB_AUDIO_RESOLUTION_BITS
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_N_BYTES_PER_SAMPLE_RX          USB_AUDIO_BYTES_PER_SAMPLE
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_RESOLUTION_RX                  USB_AUDIO_RESOLUTION_BITS
+#endif
+
+
+// EP and buffer size - for isochronous EP´s, the buffer and EP size are equal (different sizes would not make sense)
+#define CFG_TUD_AUDIO_ENABLE_EP_IN                1
+
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_IN    USB_AUDIO_ISO_EP_SIZE
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_SZ_IN    USB_AUDIO_ISO_EP_SIZE
+
+#define CFG_TUD_AUDIO_FUNC_1_EP_IN_SW_BUF_SZ      (USB_AUDIO_ISO_EP_SIZE * 4)
+#define CFG_TUD_AUDIO_FUNC_1_EP_IN_SZ_MAX         USB_AUDIO_ISO_EP_SIZE
+
+// EP and buffer size - for isochronous EP´s, the buffer and EP size are equal (different sizes would not make sense)
+#define CFG_TUD_AUDIO_ENABLE_EP_OUT               1
+
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_OUT   USB_AUDIO_ISO_EP_SIZE
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_SZ_OUT   USB_AUDIO_ISO_EP_SIZE
+
+#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ     (USB_AUDIO_ISO_EP_SIZE * 4)
+#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX        USB_AUDIO_ISO_EP_SIZE
+
+// Number of Standard AS Interface Descriptors (4.9.1) defined per audio function - this is required to be able to remember the current alternate settings of these interfaces - We restrict us here to have a constant number for all audio functions (which means this has to be the maximum number of AS interfaces an audio function has and a second audio function with less AS interfaces just wastes a few bytes)
+#define CFG_TUD_AUDIO_FUNC_1_N_AS_INT 	          2
+
+// Size of control request buffer
+#define CFG_TUD_AUDIO_FUNC_1_CTRL_BUF_SZ	64
+#define CFG_TUD_AUDIO_EP_IN_FLOW_CONTROL   0
+
+//--------------------------------------------------------------------
+// HID CLASS DRIVER CONFIGURATION
+//--------------------------------------------------------------------
+#define CFG_TUD_HID_EP_BUFSIZE    USB_HID_EP_SIZE
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _TUSB_CONFIG_H_ */
