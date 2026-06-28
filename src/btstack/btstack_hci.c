@@ -14,13 +14,29 @@
 
 #define A2DP_SOURCE_DEMO_INQUIRY_DURATION_1280MS 12
 
-static btstack_packet_callback_registration_t hci_event_callback_registration;
+static btstack_packet_callback_registration_t hci_state_callback_registration;
 
 static char device_addr_string[] = "00:00:00:00:00:00";
 static bd_addr_t device_addr;
 static bd_addr_t device_addr_list[2];
 
 static bool scan_active = true;
+static bool auto_connect_tried_on_boot = false;
+
+static bool bd_addr_is_zero_local(const bd_addr_t addr){
+    for (int i = 0; i < 6; i++){
+        if (addr[i] != 0x00 && addr[i] != 0xFF){
+            return false;
+        }
+    }
+    return true;
+}
+
+static void set_active_device_addr(const bd_addr_t addr){
+    memcpy(device_addr, addr, sizeof(bd_addr_t));
+    strncpy(device_addr_string, bd_addr_to_str(device_addr), sizeof(device_addr_string) - 1);
+    device_addr_string[sizeof(device_addr_string) - 1] = '\0';
+}
 
 
 const char * get_device_addr_string(){
@@ -60,7 +76,22 @@ static void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
     switch (hci_event_packet_get_type(packet)){
         case  BTSTACK_EVENT_STATE:
             if (btstack_event_state_get_state(packet) != HCI_STATE_WORKING) return;
-            if ( strcmp(device_addr_string , "00:00:00:00:00:00") == 0 ){
+
+            // On boot, prefer direct reconnect to the last MAC stored in flash.
+            // The old code decided using only device_addr_string; when the MAC was
+            // loaded from flash, the string could still be "00:00:00:00:00:00", so
+            // it scanned/pairing again instead of reconnecting.
+            if (!auto_connect_tried_on_boot){
+                auto_connect_tried_on_boot = true;
+                get_link_keys();
+            }
+
+            if (!bd_addr_is_zero_local(device_addr)){
+                printf("Known Bluetooth sink %s, reconnecting without pairing scan...\n", bd_addr_to_str(device_addr));
+                scan_active = false;
+                set_led_mode_double_blink();
+                avdtp_source_establish_stream();
+            } else {
                 gap_start_scanning();
             }
             break;
@@ -88,7 +119,7 @@ static void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
             }
             printf("\n");
             if ((cod & bluetooth_speaker_cod) == bluetooth_speaker_cod){
-                memcpy(device_addr, address, 6);
+                set_active_device_addr(address);
                 printf("Bluetooth speaker detected, trying to connect to %s...\n", bd_addr_to_str(device_addr));
                 scan_active = false;
                 gap_inquiry_stop();
@@ -126,31 +157,33 @@ void get_link_keys(void){
 
     int ok = gap_link_key_iterator_init(&it);
     if (!ok) {
-        printf("Link key iterator not implemented\n");
-        return;
+        printf("Link key iterator not implemented; using flash MAC slot only\n");
+    } else {
+        printf("Stored First link key: \n");
+
+        if (gap_link_key_iterator_get_next(&it, addr, link_key, &type)){
+            addr_str = bd_addr_to_str(addr);
+            printf("%s - type %u, key: ", addr_str, (int) type);
+            printf_hexdump(link_key, 16);
+            strncpy(device_addr_string, addr_str, sizeof(device_addr_string) - 1);
+            device_addr_string[sizeof(device_addr_string) - 1] = '\0';
+            sscanf_bd_addr(device_addr_string, device_addr_list[0]);
+        }
+
+        //sscanf_bd_addr(device_addr_string, device_addr);
+
+        if (gap_link_key_iterator_get_next(&it, addr, link_key, &type)){
+            addr_str = bd_addr_to_str(addr);
+            printf("%s - type %u, key: ", addr_str, (int) type);
+            printf_hexdump(link_key, 16);
+            strncpy(device_addr_string, addr_str, sizeof(device_addr_string) - 1);
+            device_addr_string[sizeof(device_addr_string) - 1] = '\0';
+            sscanf_bd_addr(device_addr_string, device_addr_list[1]);
+        }
+
+        printf(".\n");
+        gap_link_key_iterator_done(&it);
     }
-    printf("Stored First link key: \n");
-
-    if (gap_link_key_iterator_get_next(&it, addr, link_key, &type)){
-        addr_str = bd_addr_to_str(addr);
-        printf("%s - type %u, key: ", addr_str, (int) type);
-        printf_hexdump(link_key, 16);
-        strncpy(device_addr_string, addr_str, sizeof(device_addr_string) - 1);
-        sscanf_bd_addr(device_addr_string, device_addr_list[0]);
-    }
-
-    //sscanf_bd_addr(device_addr_string, device_addr);
-
-    if (gap_link_key_iterator_get_next(&it, addr, link_key, &type)){
-        addr_str = bd_addr_to_str(addr);
-        printf("%s - type %u, key: ", addr_str, (int) type);
-        printf_hexdump(link_key, 16);
-        strncpy(device_addr_string, addr_str, sizeof(device_addr_string) - 1);
-        sscanf_bd_addr(device_addr_string, device_addr_list[1]);
-    }
-
-    printf(".\n");
-    gap_link_key_iterator_done(&it);
 
     uint8_t currect_slot = read_uint8_last_flash();
 
@@ -161,7 +194,9 @@ void get_link_keys(void){
         bd_addr_t  addr_flash_slot1;
         read_slot1_mac(addr_flash_slot1);
         printf("cur slot1 flash addr is %s\n ", bd_addr_to_str(addr_flash_slot1));
-        memcpy(device_addr, addr_flash_slot1, sizeof(bd_addr_t)); 
+        if (!bd_addr_is_zero_local(addr_flash_slot1)){
+            set_active_device_addr(addr_flash_slot1);
+        }
     }
 
     if(currect_slot == 0x2){
@@ -170,13 +205,15 @@ void get_link_keys(void){
         bd_addr_t  addr_flash_slot2;
         read_slot2_mac(addr_flash_slot2);
         printf("cur slot2 flash addr is %s\n ", bd_addr_to_str(addr_flash_slot2));
-        memcpy(device_addr, addr_flash_slot2, sizeof(bd_addr_t)); 
+        if (!bd_addr_is_zero_local(addr_flash_slot2)){
+            set_active_device_addr(addr_flash_slot2);
+        }
     }
     
 }
 
 
-static btstack_packet_callback_registration_t hci_event_callback_registration;
+static btstack_packet_callback_registration_t hci_discovery_callback_registration;
 
 
 static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size){
@@ -199,8 +236,8 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 void bt_hci_init(void){
 
     // inform about BTstack state
-    hci_event_callback_registration.callback = &packet_handler;
-    hci_add_event_handler(&hci_event_callback_registration);
+    hci_state_callback_registration.callback = &packet_handler;
+    hci_add_event_handler(&hci_state_callback_registration);
 
     // Request role change on reconnecting headset to always use them in slave mode
     hci_set_master_slave_policy(0);
@@ -215,8 +252,8 @@ void bt_hci_init(void){
     gap_set_class_of_device(0x200408);
 
     /* Register for HCI events */
-    hci_event_callback_registration.callback = &hci_packet_handler;
-    hci_add_event_handler(&hci_event_callback_registration);
+    hci_discovery_callback_registration.callback = &hci_packet_handler;
+    hci_add_event_handler(&hci_discovery_callback_registration);
 
     get_link_keys();
 
