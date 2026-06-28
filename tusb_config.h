@@ -110,16 +110,16 @@ extern "C" {
 // The PS5 path uses USB Audio Class 1.0 (TinyUSB audio10).
 #define CFG_TUD_AUDIO_ENABLE_INTERRUPT_EP                            0
 
-#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN                                109
+#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN                                192
 
 // How many formats are used, need to adjust USB descriptor if changed
-#define CFG_TUD_AUDIO_FUNC_1_N_FORMATS                               1
+#define CFG_TUD_AUDIO_FUNC_1_N_FORMATS                               2
 
 // Audio format type I specifications
 /* 24bit/48kHz is the best quality for headset or 24bit/96kHz for 2ch speaker,
    high-speed is needed beyond this */
 #define CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE                         USB_AUDIO_SAMPLE_RATE
-#define CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX                           0
+#define CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX                           USB_AUDIO_MIC_CHANNELS
 #define CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX                           USB_AUDIO_SPK_CHANNELS
 
 // 16bit in 16bit slots
@@ -149,7 +149,7 @@ extern "C" {
 
 
 // EP and buffer size - for isochronous EP´s, the buffer and EP size are equal (different sizes would not make sense)
-#define CFG_TUD_AUDIO_ENABLE_EP_IN                0
+#define CFG_TUD_AUDIO_ENABLE_EP_IN                1
 
 #define CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_EP_SZ_IN  USB_AUDIO_MIC_PACKET_BYTES
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_IN    USB_AUDIO_MIC_PACKET_BYTES
@@ -165,11 +165,11 @@ extern "C" {
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_OUT   USB_AUDIO_SPK_PACKET_BYTES
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_SZ_OUT   USB_AUDIO_SPK_PACKET_BYTES
 
-#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ     (USB_AUDIO_SPK_PACKET_BYTES * 4)
+#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ     (USB_AUDIO_SPK_PACKET_BYTES * 8)
 #define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX        USB_AUDIO_SPK_PACKET_BYTES
 
 // Number of Standard AS Interface Descriptors (4.9.1) defined per audio function - this is required to be able to remember the current alternate settings of these interfaces - We restrict us here to have a constant number for all audio functions (which means this has to be the maximum number of AS interfaces an audio function has and a second audio function with less AS interfaces just wastes a few bytes)
-#define CFG_TUD_AUDIO_FUNC_1_N_AS_INT 	          1
+#define CFG_TUD_AUDIO_FUNC_1_N_AS_INT 	          4
 
 // Size of control request buffer
 #define CFG_TUD_AUDIO_FUNC_1_CTRL_BUF_SZ	64

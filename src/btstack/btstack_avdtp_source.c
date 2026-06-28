@@ -462,14 +462,13 @@ static bool     filling_slot_valid = false;
 static uint16_t slot_frame_int16  = AUDIO_SLOT_MAX_INT16; // set per codec
 
 static bool is_usb_streaming = false;
+static bool is_usb_endpoint_open = false;
 static bool have_ldac_codec_capabilities = false;
 static bool have_aaceld_codec_capabilities = false;
 bd_addr_t cur_active_device;
 
-
-// Diagnostic fallback: the first tone build proved Bluetooth/A2DP is alive.
-// Keep the fallback tone enabled so silence means a real crash/disconnect,
-// while a beep means USB OUT audio packets are still not reaching the queue.
+// Diagnostic build: if the Bluetooth stream is alive but no USB speaker
+// packets reach the queue, generate a low test tone instead of silence.
 #define USB_AUDIO_IDLE_TEST_TONE 1
 
 static void audio_slot_fill_idle_audio(int16_t *dst, uint16_t int16_count) {
@@ -477,13 +476,26 @@ static void audio_slot_fill_idle_audio(int16_t *dst, uint16_t int16_count) {
     static uint16_t phase = 0;
     uint16_t frames = int16_count / 2;
 
+    // Diagnostic tone:
+    // - USB streaming/data seen: silence on underrun (do not mask real audio)
+    // - endpoint opened but no data: faster/lower tone
+    // - endpoint not opened: original continuous tone
+    if (is_usb_streaming) {
+        memset(dst, 0, int16_count * sizeof(int16_t));
+        return;
+    }
+
+    uint16_t period = is_usb_endpoint_open ? 96 : 48;
+    uint16_t duty   = is_usb_endpoint_open ? 12 : 24;
+    int16_t amp     = is_usb_endpoint_open ? 1800 : 3000;
+
     for (uint16_t i = 0; i < frames; i++) {
-        int16_t sample = (phase < 24) ? 3000 : -3000;
+        int16_t sample = (phase < duty) ? amp : -amp;
         dst[(i * 2) + 0] = sample;
         dst[(i * 2) + 1] = sample;
 
         phase++;
-        if (phase >= 48) {
+        if (phase >= period) {
             phase = 0;
         }
     }
@@ -726,6 +738,10 @@ bool check_is_streaming(){
 
 void set_usb_streaming(bool flag){
     is_usb_streaming = flag;
+}
+
+void set_usb_endpoint_open(bool flag){
+    is_usb_endpoint_open = flag;
 }
 
 bool get_allow_switch_slot(){
@@ -2413,8 +2429,11 @@ void avdtp_source_establish_stream(){
 
 
 int set_next_codec(uint8_t num){
-    //return 0;
-    //return setup_sbc_configuration();
+    // Force the mandatory A2DP SBC path while debugging PS5/UAC1 audio.
+    // This avoids LDAC/AAC/AAC-ELD negotiation differences between headsets.
+    (void)num;
+    return setup_sbc_configuration();
+
     switch (num){
         case 0: // AAC-ELD > LDAC > AAC > SBC
             if (have_aaceld_codec_capabilities){
@@ -2530,11 +2549,8 @@ static void avrcp_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t 
             
             printf("Enable Volume Change notification\n");
             avrcp_controller_enable_notification(media_tracker.avrcp_cid, AVRCP_NOTIFICATION_EVENT_VOLUME_CHANGED);
-            // Set initial volume to 50% on first connection
-            if (media_tracker.volume == 0 || media_tracker.volume == 127) {
-                media_tracker.volume = 64;  // ~50% (0-127 range)
-                avrcp_controller_set_absolute_volume(media_tracker.avrcp_cid, media_tracker.volume);
-            }
+            media_tracker.volume = 127;
+            avrcp_controller_set_absolute_volume(media_tracker.avrcp_cid, media_tracker.volume);
             printf("Enable Battery Status Change notification\n");
             avrcp_controller_enable_notification(media_tracker.avrcp_cid, AVRCP_NOTIFICATION_EVENT_BATT_STATUS_CHANGED);
             return;
