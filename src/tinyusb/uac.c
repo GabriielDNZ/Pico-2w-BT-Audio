@@ -148,7 +148,7 @@
  int16_t mic_silence[USB_AUDIO_MIC_PACKET_BYTES / sizeof(int16_t)];
 
  // Buffer for speaker data
- int32_t spk_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ / 4];
+ int16_t spk_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ / 2];
  // Speaker data size received in the last frame
  int spk_data_size;
  // Resolution per format
@@ -749,10 +749,15 @@ void tinyusb_control_task(void){
  bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting)
  {
    (void)rhport;
-   (void)n_bytes_received;
    (void)func_id;
    (void)ep_out;
    (void)cur_alt_setting;
+
+   // IMPORTANT for UAC1: consume the isochronous OUT packet in the pre-read
+   // callback, like the known-working UAC2 reference project does.
+   // Reading again from audio_task()/post_read can split/delay packets and make
+   // the SBC encoder receive uneven PCM, which sounds like distortion/picote.
+   push_usb_speaker_bytes(n_bytes_received);
 
    return true;
  }
@@ -760,12 +765,12 @@ void tinyusb_control_task(void){
  bool tud_audio_rx_done_post_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting)
  {
    (void)rhport;
+   (void)n_bytes_received;
    (void)func_id;
    (void)ep_out;
    (void)cur_alt_setting;
- 
-   push_usb_speaker_bytes(n_bytes_received);
- 
+
+   // Packet already consumed in tud_audio_rx_done_pre_read_cb().
    return true;
  }
 
@@ -804,7 +809,8 @@ void tinyusb_control_task(void){
 
  void audio_task(void)
  {
-  drain_usb_speaker_fifo();
+  // USB speaker packets are consumed synchronously in tud_audio_rx_done_pre_read_cb().
+  // Do not drain again here, or packets can be delayed/fragmented.
   queue_mic_silence();
 
   if (is_usb_audio_running){
