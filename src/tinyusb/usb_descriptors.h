@@ -19,7 +19,11 @@
 #define USB_AUDIO_MIC_CHANNELS               1
 #define USB_AUDIO_BYTES_PER_SAMPLE           2
 #define USB_AUDIO_RESOLUTION_BITS            16
-#define USB_AUDIO_SPK_PACKET_BYTES           192  // 48000/1000 * 2ch * 2bytes = 192 bytes/ms
+// Nominal 48 kHz stereo 16-bit is 192 bytes/ms.
+// Keep the UAC1 endpoint max at 196 so the host can legally deliver
+// occasional 49-sample adaptive packets without the device refusing/truncating them.
+#define USB_AUDIO_SPK_NOMINAL_PACKET_BYTES   192
+#define USB_AUDIO_SPK_PACKET_BYTES           196
 #define USB_AUDIO_MIC_PACKET_BYTES           96
 
 #define USB_HID_REPORT_DESC_LEN              62
