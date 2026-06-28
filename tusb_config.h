@@ -110,7 +110,7 @@ extern "C" {
 // The PS5 path uses USB Audio Class 1.0 (TinyUSB audio10).
 #define CFG_TUD_AUDIO_ENABLE_INTERRUPT_EP                            0
 
-#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN                                110
+#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN                                192
 
 // How many formats are used, need to adjust USB descriptor if changed
 #define CFG_TUD_AUDIO_FUNC_1_N_FORMATS                               1
@@ -149,7 +149,7 @@ extern "C" {
 
 
 // EP and buffer size - for isochronous EP´s, the buffer and EP size are equal (different sizes would not make sense)
-#define CFG_TUD_AUDIO_ENABLE_EP_IN                0
+#define CFG_TUD_AUDIO_ENABLE_EP_IN                1
 
 #define CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_EP_SZ_IN  USB_AUDIO_MIC_PACKET_BYTES
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_IN    USB_AUDIO_MIC_PACKET_BYTES
@@ -169,7 +169,7 @@ extern "C" {
 #define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX        USB_AUDIO_SPK_PACKET_BYTES
 
 // Number of Standard AS Interface Descriptors (4.9.1) defined per audio function - this is required to be able to remember the current alternate settings of these interfaces - We restrict us here to have a constant number for all audio functions (which means this has to be the maximum number of AS interfaces an audio function has and a second audio function with less AS interfaces just wastes a few bytes)
-#define CFG_TUD_AUDIO_FUNC_1_N_AS_INT 	          1
+#define CFG_TUD_AUDIO_FUNC_1_N_AS_INT 	          2
 
 // Size of control request buffer
 #define CFG_TUD_AUDIO_FUNC_1_CTRL_BUF_SZ	64

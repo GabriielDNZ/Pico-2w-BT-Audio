@@ -153,6 +153,67 @@
  // Some hosts start isochronous OUT before sending the TinyUSB format callback,
  // so default to the advertised format instead of dropping the first packets.
  uint8_t current_resolution = USB_AUDIO_RESOLUTION_BITS;
+  uint16_t usb_stop_delay = 0;
+ bool is_usb_audio_running = false;
+
+
+ static volatile bool usb_rx_irq_seen = false;
+ static uint32_t usb_rx_total_bytes = 0;
+ static uint32_t usb_rx_last_log_ms = 0;
+
+ static void usb_audio_accept_out_bytes(uint16_t bytes_read)
+ {
+   if (bytes_read == 0)
+   {
+     return;
+   }
+
+   usb_stop_delay = 0;
+   is_usb_audio_running = true;
+   set_usb_streaming(true);
+
+   if (current_resolution == 0)
+   {
+     current_resolution = USB_AUDIO_RESOLUTION_BITS;
+   }
+
+   // UAC1 PS5/Windows build advertises one format only: 48 kHz, stereo, signed 16-bit.
+   // One stereo frame = 4 bytes. If the host gives a short/odd packet, use the aligned part.
+   if ((current_resolution == USB_AUDIO_RESOLUTION_BITS) && bytes_read >= 4)
+   {
+     uint16_t aligned_bytes = bytes_read & (uint16_t)~0x03u;
+     if (aligned_bytes)
+     {
+       int16_t *src = (int16_t *)spk_buf;
+       uint16_t stereo_frames = aligned_bytes / 4;
+       audio_slot_push_samples(src, stereo_frames);
+       usb_rx_total_bytes += aligned_bytes;
+     }
+   }
+ }
+
+ static void usb_audio_drain_out_endpoint(void)
+ {
+   // Codex found BT/A2DP alive via the tone; this is the missing USB OUT side.
+   // Some TinyUSB/Pico SDK builds do not call the pre-read callback reliably for
+   // the hand-built UAC1 descriptor, so poll/drain the OUT FIFO from the normal task too.
+   for (uint8_t i = 0; i < 4; i++)
+   {
+     uint16_t bytes = tud_audio_read(spk_buf, sizeof(spk_buf));
+     if (bytes == 0)
+     {
+       break;
+     }
+     usb_audio_accept_out_bytes(bytes);
+   }
+
+   uint32_t now = board_millis();
+   if (usb_rx_total_bytes && (now - usb_rx_last_log_ms) > 5000)
+   {
+     usb_rx_last_log_ms = now;
+     printf("USB AUDIO OUT: received %lu bytes total\n", (unsigned long)usb_rx_total_bytes);
+   }
+ }
  
  //void led_blinking_task(void);
  void audio_task(void);
@@ -408,8 +469,7 @@ void tinyusb_control_task(void){
 
  static bool uac1_is_mic_feature_unit(uint8_t entity)
  {
-   (void)entity;
-   return false;
+   return entity == UAC1_ENTITY_MIC_FEATURE_UNIT;
  }
 
  static uint8_t uac1_clamp_channel(uint8_t channel, uint8_t max_channels)
@@ -548,7 +608,7 @@ void tinyusb_control_task(void){
    uint8_t const control = UAC_REQ_CONTROL(p_request);
    uint8_t const request = p_request->bRequest;
 
-   if (ep != 0x01 || control != AUDIO10_EP_CTRL_SAMPLING_FREQ)
+   if ((ep != 0x01 && ep != 0x82) || control != AUDIO10_EP_CTRL_SAMPLING_FREQ)
    {
      return false;
    }
@@ -575,7 +635,7 @@ void tinyusb_control_task(void){
    uint8_t const ep = UAC_REQ_ENDPOINT(p_request);
    uint8_t const control = UAC_REQ_CONTROL(p_request);
 
-   if (ep != 0x01 ||
+   if ((ep != 0x01 && ep != 0x82) ||
        control != AUDIO10_EP_CTRL_SAMPLING_FREQ ||
        p_request->bRequest != AUDIO10_CS_REQ_SET_CUR ||
        p_request->wLength != sizeof(audio10_control_cur_3_t))
@@ -632,6 +692,8 @@ void tinyusb_control_task(void){
    if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt == 0)
        blink_interval_ms = BLINK_MOUNTED;
 
+   if (ITF_NUM_AUDIO_STREAMING_MIC == itf && alt == 0)
+       is_usb_mic_running = false;
  
    return true;
  }
@@ -646,6 +708,8 @@ void tinyusb_control_task(void){
    if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt != 0)
        blink_interval_ms = BLINK_STREAMING;
 
+   if (ITF_NUM_AUDIO_STREAMING_MIC == itf)
+       is_usb_mic_running = alt != 0;
  
    // Clear buffer when streaming format is changed
    spk_data_size = 0;
@@ -657,59 +721,52 @@ void tinyusb_control_task(void){
    return true;
  }
 
- uint16_t usb_stop_delay = 0;
- bool is_usb_audio_running = false;
-
  bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting)
  {
    (void)rhport;
+   (void)n_bytes_received;
    (void)func_id;
    (void)ep_out;
    (void)cur_alt_setting;
- 
-   spk_data_size = tud_audio_read(spk_buf, n_bytes_received);
 
-   if (spk_data_size)
-   {
-    usb_stop_delay = 0;
-    is_usb_audio_running = true;
-    set_usb_streaming(true);
+   usb_rx_irq_seen = true;
+   usb_audio_drain_out_endpoint();
+   return true;
+ }
 
-    if (current_resolution == 0)
-    {
-      current_resolution = USB_AUDIO_RESOLUTION_BITS;
-    }
-
-    if (current_resolution == USB_AUDIO_RESOLUTION_BITS && (spk_data_size % 4) == 0)
-    {
-      int16_t *src = (int16_t *)spk_buf;
-      uint16_t sample_count = spk_data_size / 4;
-
-      audio_slot_push_samples(src, sample_count);
-    }
-
-    spk_data_size = 0;
-   } 
- 
+ // Newer TinyUSB trees use this ISR callback name. Keep it lightweight and drain later in audio_task().
+ bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting)
+ {
+   (void)rhport;
+   (void)n_bytes_received;
+   (void)func_id;
+   (void)ep_out;
+   (void)cur_alt_setting;
+   usb_rx_irq_seen = true;
    return true;
  }
 
  static void queue_mic_silence(void)
  {
-   // Speaker-only build: no USB microphone endpoint.
+   if (is_usb_mic_running)
+   {
+     tud_audio_write(mic_silence, sizeof(mic_silence));
+   }
  }
  
-
-#if CFG_TUD_AUDIO_ENABLE_EP_IN
  bool tud_audio_tx_done_pre_load_cb(uint8_t rhport, uint8_t itf, uint8_t ep_in, uint8_t cur_alt_setting)
  {
    (void)rhport;
-   (void)itf;
    (void)ep_in;
    (void)cur_alt_setting;
+
+   if (itf == ITF_NUM_AUDIO_STREAMING_MIC)
+   {
+     queue_mic_silence();
+   }
+
    return true;
  }
-#endif
  
  //--------------------------------------------------------------------+
  // AUDIO Task
@@ -718,6 +775,9 @@ void tinyusb_control_task(void){
 
  void audio_task(void)
  {
+  // Main fix: drain the USB Audio OUT endpoint from the task loop as well as from
+  // the TinyUSB callback. This catches packets when the callback path is not firing.
+  usb_audio_drain_out_endpoint();
   queue_mic_silence();
 
   if (is_usb_audio_running){
