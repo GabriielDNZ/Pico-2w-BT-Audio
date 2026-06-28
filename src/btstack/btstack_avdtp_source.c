@@ -468,7 +468,7 @@ bd_addr_t cur_active_device;
 
 // Diagnostic build: if the Bluetooth stream is alive but no USB speaker
 // packets reach the queue, generate a low test tone instead of silence.
-#define USB_AUDIO_IDLE_TEST_TONE 1
+#define USB_AUDIO_IDLE_TEST_TONE 0
 
 static void audio_slot_fill_idle_audio(int16_t *dst, uint16_t int16_count) {
 #if USB_AUDIO_IDLE_TEST_TONE

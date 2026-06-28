@@ -80,7 +80,7 @@ add_executable(${PROJECT_NAME}
     src/btstack/btstack_avdtp_source.c
     src/btstack/btstack_hci.c
     src/tinyusb/uac.c
-    src/tinyusb/usb_descriptors.c    src/btstack/link_key_flash.c
+    src/tinyusb/usb_descriptors.c
 )
 
 
@@ -103,6 +103,7 @@ pico_stdlib
 pico_btstack_ble
 pico_btstack_classic
 pico_btstack_cyw43
+pico_btstack_flash_bank
 pico_cyw43_arch_threadsafe_background
 pico_btstack_sbc_encoder
 pico_multicore
