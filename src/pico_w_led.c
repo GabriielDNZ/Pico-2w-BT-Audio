@@ -4,6 +4,7 @@
 #include "pico_w_led.h"
 
 #include "pico/flash.h"
+#include "pico/btstack_flash_bank.h"
 #include "hardware/flash.h"
 
 
@@ -199,8 +200,14 @@ void stop_triple_blink(void){
 // #define FLASH_SECTOR_SIZE     4096
 #define FLASH_SIZE_BYTES      PICO_FLASH_SIZE_BYTES
 
-// We’ll write to the very last byte in flash:
-#define TARGET_OFFSET         (FLASH_SIZE_BYTES - 1)
+// BTstack keeps Bluetooth link keys in the final two flash sectors. Store the
+// app's selected slot and remembered MACs in the sector just before that.
+#define APP_FLASH_SECTOR_BASE       (PICO_FLASH_BANK_STORAGE_OFFSET - FLASH_SECTOR_SIZE)
+#define APP_FLASH_PAGE_BASE         APP_FLASH_SECTOR_BASE
+#define SLOT1_OFFSET_IN_PAGE        0
+#define SLOT2_OFFSET_IN_PAGE        MAC_LEN
+#define SLOT_SELECT_OFFSET_IN_PAGE  (MAC_LEN * 2)
+#define TARGET_OFFSET               (APP_FLASH_PAGE_BASE + SLOT_SELECT_OFFSET_IN_PAGE)
 
 // ─── RAM BUFFERS & STATE FOR CALLBACK ─────────────────────────────────────────
 static uint8_t  page_buf[FLASH_PAGE_SIZE] __attribute__((aligned(FLASH_PAGE_SIZE)));
@@ -269,15 +276,9 @@ uint8_t read_uint8_last_flash(void) {
 
 
 
-// Base of the final 256-byte page in flash:
-#define LAST_PAGE_BASE        (FLASH_SIZE_BYTES - FLASH_PAGE_SIZE)
-// Base of its containing 4 KiB sector:
-#define LAST_SECTOR_BASE      (LAST_PAGE_BASE & ~(FLASH_SECTOR_SIZE - 1))
-
-// We carve out two 7-byte slots at the start of that page:
-
-#define SLOT1_OFFSET_IN_PAGE  0           // bytes [0..6]
-#define SLOT2_OFFSET_IN_PAGE  MAC_LEN     // bytes [7..13]
+// Base of the app storage page and its containing 4 KiB sector:
+#define LAST_PAGE_BASE        APP_FLASH_PAGE_BASE
+#define LAST_SECTOR_BASE      APP_FLASH_SECTOR_BASE
 
 // ─── RAM BUFFER & STATE ───────────────────────────────────────────────────────
 static uint8_t mac_page_buf[FLASH_PAGE_SIZE]

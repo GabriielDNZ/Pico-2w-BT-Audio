@@ -39,6 +39,39 @@ project(PicoW_USB_BT_Audio C CXX ASM)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
+set(TINYUSB_AUDIO_DEVICE_C "${PICO_SDK_PATH}/lib/tinyusb/src/class/audio/audio_device.c")
+if (EXISTS "${TINYUSB_AUDIO_DEVICE_C}")
+    file(READ "${TINYUSB_AUDIO_DEVICE_C}" TINYUSB_AUDIO_DEVICE_SRC)
+    string(FIND "${TINYUSB_AUDIO_DEVICE_SRC}" "itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_UNDEF" TINYUSB_UAC1_PATCHED)
+    if (TINYUSB_UAC1_PATCHED EQUAL -1)
+        string(REPLACE
+            "TU_VERIFY(itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_V2);"
+            "TU_VERIFY(itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_V2 ||\n            itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_UNDEF);"
+            TINYUSB_AUDIO_DEVICE_SRC
+            "${TINYUSB_AUDIO_DEVICE_SRC}"
+        )
+        file(WRITE "${TINYUSB_AUDIO_DEVICE_C}" "${TINYUSB_AUDIO_DEVICE_SRC}")
+        message(STATUS "Patched TinyUSB audio driver to accept UAC1 interface protocol")
+    endif()
+    string(FIND "${TINYUSB_AUDIO_DEVICE_SRC}" "audiod_cs_ac_interface_total_length" TINYUSB_UAC1_TOTAL_PATCHED)
+    if (TINYUSB_UAC1_TOTAL_PATCHED EQUAL -1)
+        string(REPLACE
+            "// This helper function finds for a given audio function and AS interface number the index of the attached driver structure, the index of the interface in the audio function"
+            "static uint16_t audiod_cs_ac_interface_total_length(uint8_t const *p_desc) {\n  uint16_t const bcd_adc = tu_unaligned_read16(p_desc + 3);\n  uint8_t const total_offset = (bcd_adc < 0x0200) ? 5 : 6;\n  return tu_unaligned_read16(p_desc + total_offset);\n}\n\n// This helper function finds for a given audio function and AS interface number the index of the attached driver structure, the index of the interface in the audio function"
+            TINYUSB_AUDIO_DEVICE_SRC
+            "${TINYUSB_AUDIO_DEVICE_SRC}"
+        )
+        string(REPLACE
+            "((audio_desc_cs_ac_interface_t const *) p_desc)->wTotalLength"
+            "audiod_cs_ac_interface_total_length(p_desc)"
+            TINYUSB_AUDIO_DEVICE_SRC
+            "${TINYUSB_AUDIO_DEVICE_SRC}"
+        )
+        file(WRITE "${TINYUSB_AUDIO_DEVICE_C}" "${TINYUSB_AUDIO_DEVICE_SRC}")
+        message(STATUS "Patched TinyUSB audio driver to parse UAC1 AC header length")
+    endif()
+endif()
+
 
 #LDAC https://github.com/EHfive/ldacBT
 add_subdirectory(3rd-party/ldacBT)

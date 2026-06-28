@@ -1,6 +1,0 @@
-Correção v15b:
-- O workflow anterior passava arm-none-eabi-gcc sem caminho completo.
-- No GitHub Actions/CMake do Pico SDK isso virou /home/runner/work/.../arm-none-eabi-gcc e falhou.
-- Agora o workflow baixa Arm GNU Toolchain 14.2.Rel1 e passa o caminho completo:
-  $RUNNER_TEMP/arm-gnu/bin/arm-none-eabi-gcc
-- Firmware/descriptors não foram mexidos nesta correção.
