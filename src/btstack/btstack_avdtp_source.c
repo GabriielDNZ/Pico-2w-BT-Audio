@@ -227,9 +227,12 @@ static int aac_bit_rate = 192000;
 
 
 static const uint8_t media_sbc_codec_capabilities[] = {
-    0xFF,//(AVDTP_SBC_44100 << 4) | AVDTP_SBC_STEREO,
-    0xFF,//(AVDTP_SBC_BLOCK_LENGTH_16 << 4) | (AVDTP_SBC_SUBBANDS_8 << 2) | AVDTP_SBC_ALLOCATION_METHOD_LOUDNESS,
-    2, 53
+    // PS5 USB input is fixed at 48 kHz stereo/16-bit. Do not advertise 44.1/32/16 kHz
+    // or mono/dual-channel modes here, otherwise some sinks negotiate a rate/mode that
+    // does not match the incoming USB stream and the result is distorted/picoted audio.
+    0x11,  // 48 kHz + Joint Stereo
+    0x89,  // Block length 16 + 8 subbands + Loudness allocation
+    2, 45  // Conservative but not too low bitpool range
 };
 
 
@@ -2136,6 +2139,20 @@ static int setup_sbc_configuration(){
     configuration.allocation_method  = avdtp_choose_sbc_allocation_method(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_allocation_method_bitmap(packet));
     configuration.max_bitpool_value  = avdtp_choose_sbc_max_bitpool_value(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_max_bitpool_value(packet));
     configuration.min_bitpool_value  = avdtp_choose_sbc_min_bitpool_value(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_min_bitpool_value(packet));
+
+    // Safety clamp for PS5 path: USB is always 48 kHz stereo, so force the SBC
+    // transport to match it. Also avoid the very high bitpool values that can
+    // overload the Pico 2W link, but do not go extremely low because that can
+    // sound distorted on some headphones.
+    configuration.sampling_frequency = 48000;
+    configuration.channel_mode       = AVDTP_CHANNEL_MODE_JOINT_STEREO;
+    configuration.block_length       = 16;
+    configuration.subbands           = 8;
+    configuration.allocation_method  = AVDTP_SBC_ALLOCATION_METHOD_LOUDNESS;
+    if (configuration.max_bitpool_value > 45) configuration.max_bitpool_value = 45;
+    if (configuration.max_bitpool_value < 35) configuration.max_bitpool_value = 35;
+    if (configuration.min_bitpool_value < 2)  configuration.min_bitpool_value = 2;
+    if (configuration.min_bitpool_value > configuration.max_bitpool_value) configuration.min_bitpool_value = 2;
 
     // setup SBC configuration
     avdtp_config_sbc_store(media_codec_config_data, &configuration);
