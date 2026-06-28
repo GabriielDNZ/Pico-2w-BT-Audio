@@ -1,0 +1,18 @@
+LOW-DELAY SBC105 AAC35 AUTORECONNECT FASTSTART
+
+Base: LOW-DELAY SBC95 AAC40 AUTORECONNECT FASTSTART
+
+Changes:
+- SBC target: 95 -> 105 ms
+- BT_KEEPALIVE_SILENCE_IDLE_MS: 95 -> 105
+- AUDIO_SLOT_COUNT_SBC: 16 -> 18
+- SBC audio_timer_interval: 10 ms -> 11 ms
+- SBC_LOW_DELAY_FRAMES_PER_PACKET: 6 -> 7
+
+AAC target: 35 ms
+- AAC-LC granularity is 1024 samples (~21.3 ms per frame), so exact 35 ms is not possible.
+- AUDIO_SLOT_COUNT_AAC kept at 2 (~43 ms) for the closest safer setting.
+- aac_audio_timer_interval: 5 ms -> 4 ms.
+- AAC-ELD granularity is 10 ms; kept at 4 slots (~40 ms), closest safer setting to 35 ms.
+
+Autoreconnect/FastStart kept enabled.

@@ -9,9 +9,9 @@
 #include <stdbool.h>
 
 // Slot queue constants
-#define AUDIO_SLOT_COUNT_SBC   16   // SBC 95 ms balanced-delay profile
-#define AUDIO_SLOT_COUNT_AAC   2    // AAC-LC: 1024 samples/slot, 2*21.3ms ~= 43ms buffer
-#define AUDIO_SLOT_COUNT_ELD   4    // AAC-ELD: 480 samples/slot, 4*10ms = 40ms buffer
+#define AUDIO_SLOT_COUNT_SBC   18   // SBC 105 ms balanced-delay profile
+#define AUDIO_SLOT_COUNT_AAC   2    // AAC-LC: 1024 samples/slot, 2*21.3ms ~= 43ms (closest stable to 35ms)
+#define AUDIO_SLOT_COUNT_ELD   4    // AAC-ELD: 480 samples/slot, 4*10ms = 40ms (closest stable to 35ms)
 #define AUDIO_SLOT_COUNT_LDAC  13   // LDAC: 256 samples/slot, 13*5.3ms ~= 69ms buffer
 #define AUDIO_SLOT_COUNT_MAX   24   // pool size must still cover non-SBC codecs
 #define AUDIO_SLOT_MAX_SAMPLES 1024
