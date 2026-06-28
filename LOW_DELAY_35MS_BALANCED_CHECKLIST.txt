@@ -1,0 +1,10 @@
+LOW-DELAY 35MS BALANCED
+
+Base: LOW-DELAY 45MS BALANCED AUTORECONNECT FASTSTART
+
+Changes:
+- BT_KEEPALIVE_SILENCE_IDLE_MS: 45 -> 35
+- AUDIO_SLOT_COUNT_SBC: 8 -> 7
+- audio_timer_interval: 6 ms -> 5 ms
+- SBC_LOW_DELAY_FRAMES_PER_PACKET: 3 -> 2
+- Autoreconnect/FastStart kept enabled
