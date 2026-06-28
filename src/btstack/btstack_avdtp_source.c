@@ -83,8 +83,8 @@
 // If the USB host stops sending packets, send clean SBC silence after a short idle
 // period to keep the Bluetooth A2DP stream alive. Micro-gaps below this are not
 // filled with silence, which avoids the old picote/distorção.
-#define SBC_LOW_DELAY_FRAMES_PER_PACKET 5
-#define BT_KEEPALIVE_SILENCE_IDLE_MS 85
+#define SBC_LOW_DELAY_FRAMES_PER_PACKET 6
+#define BT_KEEPALIVE_SILENCE_IDLE_MS 95
 
 typedef struct {
     // bitmaps
@@ -226,10 +226,10 @@ static bool a2dp_is_connected_flag = false;
 
 static bool finish_scan_avdtp_codec = false;
 
-static uint8_t audio_timer_interval = 9;
+static uint8_t audio_timer_interval = 10;
 
 // on pico 2w the max stable aac bit rate under 512 simples without vbr is around 220000
-static uint8_t aac_audio_timer_interval = 4;
+static uint8_t aac_audio_timer_interval = 5;
 static uint16_t acc_num_simples = 1024;
 static int max_aac_bit_rate = 220000;
 static int aac_bit_rate = 192000;
@@ -1567,7 +1567,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 sbc_configuration.max_bitpool_value,
                 sbc_configuration.channel_mode);
 
-            audio_timer_interval = 9;  // balanced 85 ms SBC pacing
+            audio_timer_interval = 10;  // balanced 95 ms SBC pacing
 
             audio_slot_queue_configure_with_count(btstack_sbc_encoder_num_audio_frames(), AUDIO_SLOT_COUNT_SBC);
 
@@ -1807,7 +1807,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 
                 current_sample_rate = 48000;
                 acc_num_simples = aacinf.frameLength;  // use actual frame size from encoder
-                audio_timer_interval = 10;  // AAC-ELD: 10 ms frame pacing, 3 slots = 30 ms buffer
+                audio_timer_interval = 10;  // AAC-ELD: 10 ms frame pacing, 4 slots = 40 ms buffer
 
                 printf("AAC-ELD acc_num_simples=%d\n", acc_num_simples);
 
