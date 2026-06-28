@@ -1,0 +1,24 @@
+Pico 2W PS5 UAC1 - LOW DELAY BALANCED 80MS
+
+Objetivo:
+- Melhorar a qualidade em relação ao LOW-DELAY 30MS, que ficou agressivo demais.
+- Manter anti-desconexao quando ficar sem audio.
+- Aumentar a margem para aproximadamente 80 ms antes de inserir silencio keepalive.
+
+Mudancas principais contra a versao 30MS:
+- BT_KEEPALIVE_SILENCE_IDLE_MS: 30 -> 80
+- AUDIO_SLOT_COUNT_SBC: 6 -> 12
+- audio_timer_interval: 5 ms -> 8 ms
+- SBC_LOW_DELAY_FRAMES_PER_PACKET: 2 -> 4
+
+Racional:
+- 30 ms ficou apertado demais e pode fazer o pipeline SBC/BT trabalhar sem margem.
+- 80 ms evita preencher microfalhas com silencio cedo demais.
+- 12 slots da mais folga sem voltar para o buffer alto antigo.
+- 4 frames por pacote reduz overhead e deve dar mais estabilidade que 2 frames.
+
+Mantido:
+- UAC1 16-bit stereo.
+- Pacote nominal 192 bytes.
+- Logica de nao gerar silencio em microburacos pequenos.
+- Silencio limpo quando ficar realmente sem audio, para manter A2DP vivo.

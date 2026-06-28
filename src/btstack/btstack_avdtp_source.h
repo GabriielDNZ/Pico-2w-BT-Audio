@@ -9,7 +9,7 @@
 #include <stdbool.h>
 
 // Slot queue constants
-#define AUDIO_SLOT_COUNT_SBC   6    // SBC low-delay: 128 samples/slot, ~16ms queue capacity
+#define AUDIO_SLOT_COUNT_SBC   12   // SBC balanced-delay: more stable than 6 slots, still below old 24-slot queue
 #define AUDIO_SLOT_COUNT_AAC   16   // AAC-LC: 1024 samples/slot, 16*21.3ms = 341ms buffer
 #define AUDIO_SLOT_COUNT_ELD   6    // AAC-ELD: 480 samples/slot, 6*10ms = 60ms buffer
 #define AUDIO_SLOT_COUNT_LDAC  16   // LDAC: 256 samples/slot, 16*5.3ms = 85ms buffer

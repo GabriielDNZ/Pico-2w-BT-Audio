@@ -83,8 +83,8 @@
 // If the USB host stops sending packets, send clean SBC silence after a short idle
 // period to keep the Bluetooth A2DP stream alive. Micro-gaps below this are not
 // filled with silence, which avoids the old picote/distorção.
-#define SBC_LOW_DELAY_FRAMES_PER_PACKET 2
-#define BT_KEEPALIVE_SILENCE_IDLE_MS 30
+#define SBC_LOW_DELAY_FRAMES_PER_PACKET 4
+#define BT_KEEPALIVE_SILENCE_IDLE_MS 80
 
 typedef struct {
     // bitmaps
@@ -226,7 +226,7 @@ static bool a2dp_is_connected_flag = false;
 
 static bool finish_scan_avdtp_codec = false;
 
-static uint8_t audio_timer_interval = 5;
+static uint8_t audio_timer_interval = 8;
 
 // on pico 2w the max stable aac bit rate under 512 simples without vbr is around 220000
 static uint8_t aac_audio_timer_interval = 12;
