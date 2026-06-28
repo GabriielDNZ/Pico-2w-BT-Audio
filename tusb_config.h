@@ -168,8 +168,11 @@ extern "C" {
 #define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ     (USB_AUDIO_SPK_PACKET_BYTES * 4)
 #define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX        USB_AUDIO_SPK_PACKET_BYTES
 
-// Number of Standard AS Interface Descriptors (4.9.1) defined per audio function - this is required to be able to remember the current alternate settings of these interfaces - We restrict us here to have a constant number for all audio functions (which means this has to be the maximum number of AS interfaces an audio function has and a second audio function with less AS interfaces just wastes a few bytes)
-#define CFG_TUD_AUDIO_FUNC_1_N_AS_INT 	          2
+// Number of Standard AS Interface Descriptors (4.9.1) defined per audio function.
+// UAC1 headset here has four Standard AS Interface descriptors:
+// speaker alt0, speaker alt1, mic alt0, mic alt1. If this is 2, TinyUSB can
+// enumerate but the OUT endpoint state can be wrong and no host audio is drained.
+#define CFG_TUD_AUDIO_FUNC_1_N_AS_INT 	          4
 
 // Size of control request buffer
 #define CFG_TUD_AUDIO_FUNC_1_CTRL_BUF_SZ	64

@@ -199,9 +199,8 @@ void stop_triple_blink(void){
 // #define FLASH_SECTOR_SIZE     4096
 #define FLASH_SIZE_BYTES      PICO_FLASH_SIZE_BYTES
 
-// BTstack uses flash-bank storage near the end of flash for link keys.
-// Do not use the final sector here, otherwise reconnect/pairing can be lost.
-// Keep this project's slot byte + MAC slots in a private sector before BTstack's area.
+// BTstack flash-bank stores Bluetooth link keys near the end of flash.
+// Keep our slot byte in a private sector before BTstack's final sectors.
 #define USER_FLASH_SECTOR_BASE (FLASH_SIZE_BYTES - (3 * FLASH_SECTOR_SIZE))
 #define TARGET_OFFSET          (USER_FLASH_SECTOR_BASE + FLASH_SECTOR_SIZE - 1)
 
@@ -272,8 +271,8 @@ uint8_t read_uint8_last_flash(void) {
 
 
 
-// Base of the private 256-byte page used for the two remembered headset MAC slots.
-// This is kept out of the final flash sectors so it does not erase BTstack link keys.
+// Base of the private 256-byte page used for remembered headset MAC slots.
+// This avoids erasing the BTstack link-key flash bank.
 #define LAST_PAGE_BASE        (USER_FLASH_SECTOR_BASE + FLASH_SECTOR_SIZE - FLASH_PAGE_SIZE)
 #define LAST_SECTOR_BASE      USER_FLASH_SECTOR_BASE
 
