@@ -110,7 +110,7 @@ extern "C" {
 // The PS5 path uses USB Audio Class 1.0 (TinyUSB audio10).
 #define CFG_TUD_AUDIO_ENABLE_INTERRUPT_EP                            0
 
-#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN                                184
+#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN                                192
 
 // How many formats are used, need to adjust USB descriptor if changed
 #define CFG_TUD_AUDIO_FUNC_1_N_FORMATS                               1

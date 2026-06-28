@@ -149,8 +149,10 @@
  int spk_data_size;
  // Resolution per format
  const uint8_t resolutions_per_format[CFG_TUD_AUDIO_FUNC_1_N_FORMATS] = {CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX};
- // Current resolution, update on format change
- uint8_t current_resolution;
+ // This firmware only advertises one UAC1 speaker format: stereo, 16-bit, 48 kHz.
+ // Some hosts start isochronous OUT before sending the TinyUSB format callback,
+ // so default to the advertised format instead of dropping the first packets.
+ uint8_t current_resolution = USB_AUDIO_RESOLUTION_BITS;
  
  //void led_blinking_task(void);
  void audio_task(void);
@@ -673,17 +675,23 @@ void tinyusb_control_task(void){
    if (spk_data_size)
    {
     usb_stop_delay = 0;
+    is_usb_audio_running = true;
     set_usb_streaming(true);
-    if (current_resolution == 16)
+
+    if (current_resolution == 0)
+    {
+      current_resolution = USB_AUDIO_RESOLUTION_BITS;
+    }
+
+    if (current_resolution == USB_AUDIO_RESOLUTION_BITS && (spk_data_size % 4) == 0)
     {
       int16_t *src = (int16_t *)spk_buf;
-      uint16_t sample_count = spk_data_size / 4; // should be 44-45
+      uint16_t sample_count = spk_data_size / 4;
 
       audio_slot_push_samples(src, sample_count);
-
-      is_usb_audio_running = true;
-      spk_data_size = 0;
     }
+
+    spk_data_size = 0;
    } 
  
    return true;
