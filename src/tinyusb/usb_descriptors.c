@@ -40,7 +40,7 @@ uint8_t const * tud_descriptor_device_cb(void)
 #define EPNUM_AUDIO_OUT    0x01
 
 // IAD + Standard AC + CS AC tree + AS alt0/alt1 + ISO OUT endpoint.
-#define AUDIO10_DESC_LEN   110
+#define AUDIO10_DESC_LEN   109
 #define CONFIG_TOTAL_LEN   (TUD_CONFIG_DESC_LEN + AUDIO10_DESC_LEN)
 
 uint8_t const desc_configuration[] =
@@ -54,7 +54,7 @@ uint8_t const desc_configuration[] =
     0x09, 0x04, ITF_NUM_AUDIO_CONTROL, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00,
 
     // Class-specific AC header, UAC1, wTotalLength=0x0029, one streaming interface.
-    0x09, 0x24, 0x01, 0x00, 0x01, 0x29, 0x00, 0x01, ITF_NUM_AUDIO_STREAMING_SPK,
+    0x09, 0x24, 0x01, 0x00, 0x01, 0x28, 0x00, 0x01, ITF_NUM_AUDIO_STREAMING_SPK,
 
     // Speaker path: USB Streaming Input Terminal -> Feature Unit -> Speaker Output Terminal.
     0x0C, 0x24, 0x02, UAC1_ENTITY_SPK_INPUT_TERMINAL,
