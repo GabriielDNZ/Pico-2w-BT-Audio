@@ -9,7 +9,7 @@
 #include <stdbool.h>
 
 // Slot queue constants
-#define AUDIO_SLOT_COUNT_SBC   10   // SBC 60 ms balanced-delay: between 6-slot 30 ms and 12-slot 80 ms profiles
+#define AUDIO_SLOT_COUNT_SBC   8    // SBC 45 ms balanced-delay: between 6-slot 30 ms and 10-slot 60 ms profiles
 #define AUDIO_SLOT_COUNT_AAC   16   // AAC-LC: 1024 samples/slot, 16*21.3ms = 341ms buffer
 #define AUDIO_SLOT_COUNT_ELD   6    // AAC-ELD: 480 samples/slot, 6*10ms = 60ms buffer
 #define AUDIO_SLOT_COUNT_LDAC  16   // LDAC: 256 samples/slot, 16*5.3ms = 85ms buffer
