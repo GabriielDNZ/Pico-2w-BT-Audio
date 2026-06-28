@@ -80,7 +80,7 @@ add_executable(${PROJECT_NAME}
     src/btstack/btstack_avdtp_source.c
     src/btstack/btstack_hci.c
     src/tinyusb/uac.c
-    src/tinyusb/usb_descriptors.c
+    src/tinyusb/usb_descriptors.c    src/btstack/link_key_flash.c
 )
 
 

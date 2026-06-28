@@ -62,11 +62,6 @@ static void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
             if (btstack_event_state_get_state(packet) != HCI_STATE_WORKING) return;
             if ( strcmp(device_addr_string , "00:00:00:00:00:00") == 0 ){
                 gap_start_scanning();
-            } else {
-                // Saved device address loaded from flash — reconnect without scanning
-                printf("Saved device found (%s), attempting auto-reconnect...\n",
-                       device_addr_string);
-                avdtp_source_establish_stream();
             }
             break;
 

@@ -466,9 +466,9 @@ static bool have_ldac_codec_capabilities = false;
 static bool have_aaceld_codec_capabilities = false;
 bd_addr_t cur_active_device;
 
-// Set to 1 only for debugging audio path (generates a beep when BT is connected
-// but no USB audio is playing). Leave 0 for normal silent operation.
-#define USB_AUDIO_IDLE_TEST_TONE 0
+// Diagnostic build: if the Bluetooth stream is alive but no USB speaker
+// packets reach the queue, generate a low test tone instead of silence.
+#define USB_AUDIO_IDLE_TEST_TONE 1
 
 static void audio_slot_fill_idle_audio(int16_t *dst, uint16_t int16_count) {
 #if USB_AUDIO_IDLE_TEST_TONE
@@ -1230,9 +1230,6 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             status = avdtp_subevent_signaling_connection_established_get_status(packet);
             if (status != 0){
                 printf("AVDTP source signaling connection failed: status %d\n", status);
-                // Auto-reconnect failed (device may be off/out of range) — fall back to scanning
-                printf("Auto-reconnect failed, starting scan...\n");
-                gap_start_scanning();
                 break;
             }
             media_tracker.avdtp_cid = avdtp_subevent_signaling_connection_established_get_avdtp_cid(packet);
