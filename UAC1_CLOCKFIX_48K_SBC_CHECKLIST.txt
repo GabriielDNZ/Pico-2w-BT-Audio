@@ -1,0 +1,17 @@
+UAC1 CLOCKFIX 48K SBC
+
+Changes made after distorted/picoted audio remained:
+
+1. SBC is no longer advertised as all sample rates.
+   The USB input from PS5 is fixed at 48 kHz, so A2DP SBC now advertises only 48 kHz stereo/joint-stereo.
+
+2. The SBC timer now uses the actual negotiated SBC configuration in the configuration event:
+   configure_sample_rate(sbc_configuration.sampling_frequency)
+   instead of using a possibly stale sc.sampling_frequency value.
+
+3. USB endpoint max packet size is 196 bytes, matching the known-good UAC2 project, while the nominal 48 kHz stereo 16-bit frame remains 192 bytes.
+   The code pushes based on the actual number of bytes read, so 192 and 196-byte packets are both valid.
+
+4. TinyUSB OUT software buffer is reduced to 2 max packets, matching the known-good reference timing more closely.
+
+5. UAC1 request path remains UAC1-only; UAC2 clock request handling is still removed.
