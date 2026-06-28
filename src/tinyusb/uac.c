@@ -634,7 +634,6 @@ void tinyusb_control_task(void){
    if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt == 0)
    {
        blink_interval_ms = BLINK_MOUNTED;
-       usb_out_endpoint_open = false;
        set_usb_endpoint_open(false);
    }
 
@@ -654,7 +653,6 @@ void tinyusb_control_task(void){
    if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt != 0)
    {
        blink_interval_ms = BLINK_STREAMING;
-       usb_out_endpoint_open = true;
        set_usb_endpoint_open(true);
    }
 
@@ -673,7 +671,6 @@ void tinyusb_control_task(void){
 
  uint16_t usb_stop_delay = 0;
  bool is_usb_audio_running = false;
-static volatile bool usb_out_endpoint_open = false;
 static volatile bool usb_rx_seen = false;
 static uint32_t usb_rx_total_bytes = 0;
 
