@@ -9,7 +9,7 @@
 #include <stdbool.h>
 
 // Slot queue constants
-#define AUDIO_SLOT_COUNT_SBC   8    // SBC 50 ms tuned: timer=5, frames=2, enxuto sem glitch
+#define AUDIO_SLOT_COUNT_SBC   6    // SBC 30 ms slots6: keep timer=5 and frames=4
 #define AUDIO_SLOT_COUNT_AAC   16   // AAC-LC: 1024 samples/slot, 16*21.3ms = 341ms buffer
 #define AUDIO_SLOT_COUNT_ELD   6    // AAC-ELD: 480 samples/slot, 6*10ms = 60ms buffer
 #define AUDIO_SLOT_COUNT_LDAC  16   // LDAC: 256 samples/slot, 16*5.3ms = 85ms buffer

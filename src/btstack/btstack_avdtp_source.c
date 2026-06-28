@@ -83,8 +83,8 @@
 // If the USB host stops sending packets, send clean SBC silence after a short idle
 // period to keep the Bluetooth A2DP stream alive. Micro-gaps below this are not
 // filled with silence, which avoids the old picote/distorção.
-#define SBC_LOW_DELAY_FRAMES_PER_PACKET 2
-#define BT_KEEPALIVE_SILENCE_IDLE_MS 50
+#define SBC_LOW_DELAY_FRAMES_PER_PACKET 4
+#define BT_KEEPALIVE_SILENCE_IDLE_MS 30
 
 typedef struct {
     // bitmaps
