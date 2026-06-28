@@ -226,10 +226,15 @@ static int max_aac_bit_rate = 220000;
 static int aac_bit_rate = 192000;
 
 
+// Stable SBC profile for Pico 2W -> Bluetooth.
+// Previous build advertised everything and allowed bitpool 53, which can
+// overload the Pico/BT link and causes audible dropouts/picotes.
+// 0x12 = 48 kHz + Stereo. 0x15 = block length 16 + 8 subbands + Loudness.
+#define SBC_STABLE_MAX_BITPOOL 35
 static const uint8_t media_sbc_codec_capabilities[] = {
-    0xFF,//(AVDTP_SBC_44100 << 4) | AVDTP_SBC_STEREO,
-    0xFF,//(AVDTP_SBC_BLOCK_LENGTH_16 << 4) | (AVDTP_SBC_SUBBANDS_8 << 2) | AVDTP_SBC_ALLOCATION_METHOD_LOUDNESS,
-    2, 53
+    0x12,
+    0x15,
+    2, SBC_STABLE_MAX_BITPOOL
 };
 
 
@@ -2136,6 +2141,15 @@ static int setup_sbc_configuration(){
     configuration.allocation_method  = avdtp_choose_sbc_allocation_method(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_allocation_method_bitmap(packet));
     configuration.max_bitpool_value  = avdtp_choose_sbc_max_bitpool_value(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_max_bitpool_value(packet));
     configuration.min_bitpool_value  = avdtp_choose_sbc_min_bitpool_value(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_min_bitpool_value(packet));
+
+    // Keep SBC bitrate conservative. Bitpool 53 is high and was causing
+    // stutter on Pico 2W when USB audio and Bluetooth run together.
+    if (configuration.max_bitpool_value > SBC_STABLE_MAX_BITPOOL) {
+        configuration.max_bitpool_value = SBC_STABLE_MAX_BITPOOL;
+    }
+    if (configuration.min_bitpool_value > configuration.max_bitpool_value) {
+        configuration.min_bitpool_value = configuration.max_bitpool_value;
+    }
 
     // setup SBC configuration
     avdtp_config_sbc_store(media_codec_config_data, &configuration);
