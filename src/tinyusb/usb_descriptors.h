@@ -1,9 +1,8 @@
 /*
  * UAC1 descriptors for a PS5-friendly USB speaker profile.
  *
- * This keeps the device in the USB Audio 1.0 path used by the official
- * TinyUSB audio10 support instead of feeding a hand-built UAC1 tree to
- * the UAC2-style headset descriptor.
+ * This keeps the device fully in the USB Audio 1.0 path used by
+ * TinyUSB audio10 support.
  */
 
 #ifndef _USB_DESCRIPTORS_H_

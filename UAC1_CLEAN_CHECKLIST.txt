@@ -1,0 +1,31 @@
+UAC1 CLEAN NO-UAC2-LEFTOVERS
+
+Base: Pico-2w-BT-Audio-PS5-UAC1-PARSE-FIX-REAL-AUDIO-BT-MAX-github.zip
+Reference used for the Bluetooth/A2DP pipeline: PicoW-usb2bt-audio-main(3).zip
+
+Checked/fixed points:
+- USB descriptor stays UAC1: bcdADC = 0x0100 in the Class-Specific AC Header.
+- UAC1 AC Header wTotalLength stays 40 bytes: Header + Input Terminal + Feature Unit + Output Terminal.
+- Audio function descriptor length stays 109 bytes.
+- Configuration length stays 9 + 109 bytes.
+- Speaker OUT endpoint is UAC1 adaptive isochronous OUT.
+- PCM format is 48 kHz, stereo, 16-bit, 2 bytes/sample.
+- Speaker OUT packet size is 192 bytes: 48 frames/ms * 2 channels * 2 bytes.
+- TinyUSB build patch still accepts AUDIO_INT_PROTOCOL_CODE_UNDEF for UAC1.
+- TinyUSB build patch reads UAC1 AC Header wTotalLength at offset 5, not UAC2 offset 6.
+- uac.c no longer handles UAC2 clock-entity requests.
+- uac.c no longer casts UAC1 requests to audio_control_request_t.
+- uac.c handles only UAC1 Feature Unit requests and UAC1 endpoint Sampling Frequency requests.
+- USB audio is read in tud_audio_rx_done_pre_read_cb(), matching the known-working reference pipeline.
+- post_read draining was removed to avoid double/late reads.
+- audio_task no longer drains TinyUSB audio FIFO.
+- speaker buffer is int16_t because UAC1 payload is 16-bit PCM.
+- stereo frame count is calculated as bytes / (2 channels * 2 bytes).
+- Bluetooth/A2DP source file was restored from the known-working UAC2 reference.
+- SBC/AAC/LDAC selection was restored; SBC is not forcibly locked.
+- Bluetooth absolute volume is no longer forced to 127.
+- USB audio volume is no longer forced to maximum.
+
+Expected test result:
+- If the previous distortion was from UAC2 leftovers in UAC1 request/clock handling or late/double reads, this should improve it.
+- If it remains distorted with this clean build, the next suspect is not UAC2 descriptors anymore; it is likely timing between the USB callback and the A2DP encoder queue, or a host-side format being accepted differently than the descriptor says.
