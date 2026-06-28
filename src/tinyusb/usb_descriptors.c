@@ -25,8 +25,8 @@ tusb_desc_device_t const desc_device =
     .idProduct          = USB_AUDIO_PNP_PID,
     .bcdDevice          = USB_AUDIO_PNP_BCD_DEVICE,
 
-    .iManufacturer      = 0x00,
-    .iProduct           = 0x01,
+    .iManufacturer      = 0x01,
+    .iProduct           = 0x02,
     .iSerialNumber      = 0x00,
 
     .bNumConfigurations = 0x01
@@ -56,7 +56,7 @@ uint8_t const desc_configuration[] =
     0x0A, 0x24, 0x01, 0x00, 0x01, 0x47, 0x00, 0x02,
       ITF_NUM_AUDIO_STREAMING_SPK, ITF_NUM_AUDIO_STREAMING_MIC,
     0x0C, 0x24, 0x02, UAC1_ENTITY_SPK_INPUT_TERMINAL,
-      0x01, 0x01, UAC1_ENTITY_MIC_OUTPUT_TERMINAL, 0x02, 0x03, 0x00, 0x00, 0x00,
+      0x01, 0x01, 0x00, 0x02, 0x03, 0x00, 0x00, 0x00,
     0x0A, 0x24, 0x06, UAC1_ENTITY_SPK_FEATURE_UNIT,
       UAC1_ENTITY_SPK_INPUT_TERMINAL, 0x01, 0x03, 0x03, 0x03, 0x00,
     0x09, 0x24, 0x03, UAC1_ENTITY_SPK_OUTPUT_TERMINAL,
@@ -64,9 +64,9 @@ uint8_t const desc_configuration[] =
     0x0C, 0x24, 0x02, UAC1_ENTITY_MIC_INPUT_TERMINAL,
       0x01, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
     0x09, 0x24, 0x06, UAC1_ENTITY_MIC_FEATURE_UNIT,
-      UAC1_ENTITY_MIC_INPUT_TERMINAL, 0x01, 0x03, 0x00, 0x00,
+      UAC1_ENTITY_MIC_INPUT_TERMINAL, 0x01, 0x03, 0x03, 0x00,
     0x09, 0x24, 0x03, UAC1_ENTITY_MIC_OUTPUT_TERMINAL,
-      0x01, 0x01, UAC1_ENTITY_SPK_INPUT_TERMINAL, UAC1_ENTITY_MIC_FEATURE_UNIT, 0x00,
+      0x01, 0x01, 0x00, UAC1_ENTITY_MIC_FEATURE_UNIT, 0x00,
 
     // Interface 1, speaker/playback, host OUT -> Pico.
     0x09, 0x04, ITF_NUM_AUDIO_STREAMING_SPK, 0x00, 0x00, 0x01, 0x02, 0x00, 0x01,
@@ -104,12 +104,14 @@ uint8_t const * tud_descriptor_configuration_cb(uint8_t index)
 enum
 {
   STRID_LANGID = 0,
+  STRID_MANUFACTURER,
   STRID_PRODUCT,
 };
 
 char const *string_desc_arr[] =
 {
   (const char[]) { 0x09, 0x04 },
+  "C-Media Electronics Inc.",
   "USB PnP Audio Device",
 };
 
