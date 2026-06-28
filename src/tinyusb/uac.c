@@ -728,7 +728,7 @@ void tinyusb_control_task(void){
 
  static void drain_usb_speaker_fifo(void)
  {
-   for (uint8_t i = 0; i < 4; i++)
+   for (uint8_t i = 0; i < 16; i++)
    {
      uint16_t available = tud_audio_available();
      if (available == 0)

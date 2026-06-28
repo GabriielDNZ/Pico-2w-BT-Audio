@@ -229,8 +229,9 @@ static int aac_bit_rate = 192000;
 // Stable SBC profile for Pico 2W -> Bluetooth.
 // Previous build advertised everything and allowed bitpool 53, which can
 // overload the Pico/BT link and causes audible dropouts/picotes.
+// Strong anti-picote profile: lower bitpool + deeper queue.
 // 0x12 = 48 kHz + Stereo. 0x15 = block length 16 + 8 subbands + Loudness.
-#define SBC_STABLE_MAX_BITPOOL 35
+#define SBC_STABLE_MAX_BITPOOL 28
 static const uint8_t media_sbc_codec_capabilities[] = {
     0x12,
     0x15,
@@ -466,6 +467,12 @@ static uint16_t filling_offset    = 0;
 static bool     filling_slot_valid = false;
 static uint16_t slot_frame_int16  = AUDIO_SLOT_MAX_INT16; // set per codec
 
+// Last good PCM frame used to mask short USB/Bluetooth underruns.
+static int16_t last_good_slot[AUDIO_SLOT_MAX_INT16];
+static bool    last_good_slot_valid = false;
+static uint8_t underrun_repeat_count = 0;
+#define AUDIO_UNDERRUN_REPEAT_MAX 24
+
 static bool is_usb_streaming = false;
 static bool have_ldac_codec_capabilities = false;
 static bool have_aaceld_codec_capabilities = false;
@@ -541,6 +548,8 @@ void audio_slot_queue_init(void) {
     }
     filling_slot_valid = false;
     filling_offset = 0;
+    last_good_slot_valid = false;
+    underrun_repeat_count = 0;
 }
 
 void audio_slot_queue_configure_with_count(uint16_t samples_per_slot, uint8_t slot_count) {
@@ -553,6 +562,8 @@ void audio_slot_queue_configure_with_count(uint16_t samples_per_slot, uint8_t sl
         filling_slot_valid = false;
     }
     filling_offset = 0;
+    last_good_slot_valid = false;
+    underrun_repeat_count = 0;
     slot_frame_int16 = samples_per_slot * 2; // stereo
     active_slot_count = (slot_count <= AUDIO_SLOT_COUNT_MAX) ? slot_count : AUDIO_SLOT_COUNT_MAX;
     // Repopulate free queue with new count
@@ -601,14 +612,25 @@ void audio_slot_push_samples(const int16_t *src, uint16_t stereo_pair_count) {
     }
 }
 
-// BT-side helpers: pop a ready slot or get a silence slot
+// BT-side helpers: pop a ready slot.
+// If USB has a tiny underrun, repeat the last real audio frame instead of
+// inserting hard silence. This masks short PS5/TinyUSB jitter and prevents
+// audible "picote" clicks while the queue catches up.
 static bool audio_slot_pop(uint8_t *slot_idx) {
     if (queue_try_remove(&ready_queue, slot_idx)) {
+        memcpy(last_good_slot, slot_pool[*slot_idx].data, slot_frame_int16 * sizeof(int16_t));
+        last_good_slot_valid = true;
+        underrun_repeat_count = 0;
         return true;
     }
-    // No data ready — produce silence
+
     if (queue_try_remove(&free_queue, slot_idx)) {
-        audio_slot_fill_idle_audio(slot_pool[*slot_idx].data, slot_frame_int16);
+        if (last_good_slot_valid && underrun_repeat_count < AUDIO_UNDERRUN_REPEAT_MAX) {
+            memcpy(slot_pool[*slot_idx].data, last_good_slot, slot_frame_int16 * sizeof(int16_t));
+            underrun_repeat_count++;
+        } else {
+            audio_slot_fill_idle_audio(slot_pool[*slot_idx].data, slot_frame_int16);
+        }
         return true;
     }
     return false;
@@ -1509,7 +1531,9 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 sbc_configuration.max_bitpool_value,
                 sbc_configuration.channel_mode);
 
-            audio_timer_interval = 10;
+            // Send SBC in smaller, more regular bursts. 10ms could accumulate
+            // too much before can-send-now on some BT sinks and causes choppy audio.
+            audio_timer_interval = 5;
 
             audio_slot_queue_configure_with_count(btstack_sbc_encoder_num_audio_frames(), AUDIO_SLOT_COUNT_SBC);
 
