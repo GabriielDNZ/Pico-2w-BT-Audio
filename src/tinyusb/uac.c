@@ -47,7 +47,7 @@
 #define AUDIO10_EP_CTRL_SAMPLING_FREQ 0x01
 
 #define USB_AUDIO_RX_TEST_TONE 0
-#define USB_AUDIO_FORCE_BT_VOLUME_MAX 0
+#define USB_AUDIO_FORCE_BT_VOLUME_MAX 1
 
 #define UAC_REQ_ENTITY_ID(_request)  ((uint8_t)((tu_le16toh((_request)->wIndex) >> 8) & 0xff))
 #define UAC_REQ_ENDPOINT(_request)   ((uint8_t)(tu_le16toh((_request)->wIndex) & 0xff))
@@ -713,8 +713,8 @@ void tinyusb_control_task(void){
 
    if (current_resolution == USB_AUDIO_RESOLUTION_BITS && (spk_data_size % 4) == 0)
    {
-     int16_t *src = (int16_t *)spk_buf;
-     uint16_t sample_count = spk_data_size / 4;
+     int16_t *src = spk_buf;  // ja e int16, sem cast necessario
+     uint16_t sample_count = spk_data_size / 4;  // pares estereo (L+R = 4 bytes)
 
 #if USB_AUDIO_RX_TEST_TONE
      fill_usb_rx_test_tone(src, sample_count);
@@ -728,7 +728,7 @@ void tinyusb_control_task(void){
 
  static void drain_usb_speaker_fifo(void)
  {
-   for (uint8_t i = 0; i < 8; i++)
+   for (uint8_t i = 0; i < 4; i++)
    {
      uint16_t available = tud_audio_available();
      if (available == 0)
@@ -746,10 +746,28 @@ void tinyusb_control_task(void){
  bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting)
  {
    (void)rhport;
-   (void)n_bytes_received;
    (void)func_id;
    (void)ep_out;
    (void)cur_alt_setting;
+
+   spk_data_size = tud_audio_read(spk_buf, n_bytes_received);
+
+   if (spk_data_size)
+   {
+     usb_stop_delay = 0;
+     is_usb_audio_running = true;
+     set_usb_streaming(true);
+
+     if (current_resolution == 0) current_resolution = USB_AUDIO_RESOLUTION_BITS;
+
+     if (current_resolution == USB_AUDIO_RESOLUTION_BITS && (spk_data_size % 4) == 0)
+     {
+       int16_t *src = (int16_t *)spk_buf;
+       uint16_t sample_count = spk_data_size / 4;  // pares estereo L+R = 4 bytes
+       audio_slot_push_samples(src, sample_count);
+     }
+     spk_data_size = 0;
+   }
 
    return true;
  }
@@ -757,12 +775,11 @@ void tinyusb_control_task(void){
  bool tud_audio_rx_done_post_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting)
  {
    (void)rhport;
+   (void)n_bytes_received;
    (void)func_id;
    (void)ep_out;
    (void)cur_alt_setting;
- 
-   push_usb_speaker_bytes(n_bytes_received);
- 
+   // Leitura ja feita no pre_read_cb
    return true;
  }
 
@@ -801,7 +818,7 @@ void tinyusb_control_task(void){
 
  void audio_task(void)
  {
-  drain_usb_speaker_fifo();
+  // Drenagem removida: leitura feita no pre_read_cb para evitar double-read
   queue_mic_silence();
 
   if (is_usb_audio_running){

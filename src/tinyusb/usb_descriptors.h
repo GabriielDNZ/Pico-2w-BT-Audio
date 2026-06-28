@@ -19,7 +19,7 @@
 #define USB_AUDIO_MIC_CHANNELS               1
 #define USB_AUDIO_BYTES_PER_SAMPLE           2
 #define USB_AUDIO_RESOLUTION_BITS            16
-#define USB_AUDIO_SPK_PACKET_BYTES           192
+#define USB_AUDIO_SPK_PACKET_BYTES           192  // 48000/1000 * 2ch * 2bytes = 192 bytes/ms
 #define USB_AUDIO_MIC_PACKET_BYTES           96
 
 #define USB_HID_REPORT_DESC_LEN              62
