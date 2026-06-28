@@ -227,9 +227,12 @@ static int aac_bit_rate = 192000;
 
 
 static const uint8_t media_sbc_codec_capabilities[] = {
-    0xFF,//(AVDTP_SBC_44100 << 4) | AVDTP_SBC_STEREO,
-    0xFF,//(AVDTP_SBC_BLOCK_LENGTH_16 << 4) | (AVDTP_SBC_SUBBANDS_8 << 2) | AVDTP_SBC_ALLOCATION_METHOD_LOUDNESS,
-    2, 53
+    // Keep SBC negotiation compatible with more headphones/sinks.
+    // Do NOT lock to Joint Stereo/48 kHz here: some sinks reject that and audio goes silent.
+    // Only reduce max bitpool a little to ease Pico 2W BT bandwidth.
+    0xFF,
+    0xFF,
+    2, 45
 };
 
 
@@ -735,13 +738,10 @@ static int fill_sbc_audio_buffer(a2dp_media_sending_context_t * context){
     int total_num_bytes_read = 0;
     unsigned int num_audio_samples_per_sbc_buffer = btstack_sbc_encoder_num_audio_frames();
 
-    // Consume slots diretamente da ready_queue — sem depender de samples_ready time-based.
-    // Isso evita underrun: so processa o que realmente chegou via USB.
-    while ((context->max_media_payload_size - context->codec_storage_count) >= btstack_sbc_encoder_sbc_buffer_length()){
+    while (context->samples_ready >= num_audio_samples_per_sbc_buffer &&
+           (context->max_media_payload_size - context->codec_storage_count) >= btstack_sbc_encoder_sbc_buffer_length()){
 
         uint8_t slot_idx;
-        // audio_slot_pop retorna silencio se nao ha dados — para SBC queremos parar aqui
-        if (!audio_slot_has_data()) break;
         if (!audio_slot_pop(&slot_idx)) break;
 
         btstack_sbc_encoder_process_data(slot_pool[slot_idx].data);
@@ -753,11 +753,7 @@ static int fill_sbc_audio_buffer(a2dp_media_sending_context_t * context){
 
         memcpy(&context->codec_storage[1 + context->codec_storage_count], sbc_frame, sbc_frame_size);
         context->codec_storage_count += sbc_frame_size;
-        // samples_ready ajustado para nao acumular erro de drift
-        if (context->samples_ready >= num_audio_samples_per_sbc_buffer)
-            context->samples_ready -= num_audio_samples_per_sbc_buffer;
-        else
-            context->samples_ready = 0;
+        context->samples_ready -= num_audio_samples_per_sbc_buffer;
 
         audio_slot_release(slot_idx);
     }
@@ -919,11 +915,7 @@ static void avdtp_audio_timeout_handler(btstack_timer_source_t * timer){
     context->samples_ready += num_samples;
 
     // Cap to prevent unbounded accumulation when USB audio pauses
-    // Para SBC usa frame SBC; para AAC/ELD usa acc_num_simples
-    uint32_t frame_size = (cur_codec == 1)
-        ? btstack_sbc_encoder_num_audio_frames()
-        : acc_num_simples;
-    uint32_t max_ready = 8 * frame_size;
+    uint32_t max_ready = 4 * acc_num_simples;
     if (context->samples_ready > max_ready) {
         context->samples_ready = max_ready;
     }
@@ -1010,10 +1002,8 @@ static void avdtp_audio_timeout_handler(btstack_timer_source_t * timer){
     switch (codec_type){
 
         case AVDTP_CODEC_SBC:
-            // SBC: consumo data-driven, nao depende de samples_ready
             fill_sbc_audio_buffer(context);
-            if (context->codec_storage_count > 0 &&
-                (context->codec_storage_count + btstack_sbc_encoder_sbc_buffer_length()) > context->max_media_payload_size){
+            if ((context->codec_storage_count + btstack_sbc_encoder_sbc_buffer_length()) > context->max_media_payload_size){
                 // schedule sending
                 context->codec_ready_to_send = 1;
                 a2dp_source_stream_endpoint_request_can_send_now(context->avdtp_cid, context->local_seid);
@@ -1517,11 +1507,9 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 sbc_configuration.max_bitpool_value,
                 sbc_configuration.channel_mode);
 
-            // SBC: 5ms timer para alinhar melhor com frame de 128 samples (128/48 = 2.67ms)
-            audio_timer_interval = 5;
+            audio_timer_interval = 10;
 
             audio_slot_queue_configure_with_count(btstack_sbc_encoder_num_audio_frames(), AUDIO_SLOT_COUNT_SBC);
-            printf("SBC frame size: %d samples, slot_frame_int16: %d\n", btstack_sbc_encoder_num_audio_frames(), btstack_sbc_encoder_num_audio_frames()*2);
 
             cur_codec = 1;
 

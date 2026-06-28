@@ -47,7 +47,7 @@
 #define AUDIO10_EP_CTRL_SAMPLING_FREQ 0x01
 
 #define USB_AUDIO_RX_TEST_TONE 0
-#define USB_AUDIO_FORCE_BT_VOLUME_MAX 1
+#define USB_AUDIO_FORCE_BT_VOLUME_MAX 0
 
 #define UAC_REQ_ENTITY_ID(_request)  ((uint8_t)((tu_le16toh((_request)->wIndex) >> 8) & 0xff))
 #define UAC_REQ_ENDPOINT(_request)   ((uint8_t)(tu_le16toh((_request)->wIndex) & 0xff))
@@ -146,8 +146,8 @@
  // Buffer for microphone data
  int16_t mic_silence[USB_AUDIO_MIC_PACKET_BYTES / sizeof(int16_t)];
 
- // Buffer for speaker data — UAC1 16-bit stereo: dados chegam como int16, nao int32
- int16_t spk_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ / 2];
+ // Buffer for speaker data
+ int32_t spk_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ / 4];
  // Speaker data size received in the last frame
  int spk_data_size;
  // Resolution per format
@@ -713,8 +713,8 @@ void tinyusb_control_task(void){
 
    if (current_resolution == USB_AUDIO_RESOLUTION_BITS && (spk_data_size % 4) == 0)
    {
-     int16_t *src = spk_buf;  // ja e int16, sem cast necessario
-     uint16_t sample_count = spk_data_size / 4;  // pares estereo (L+R = 4 bytes)
+     int16_t *src = (int16_t *)spk_buf;
+     uint16_t sample_count = spk_data_size / 4;
 
 #if USB_AUDIO_RX_TEST_TONE
      fill_usb_rx_test_tone(src, sample_count);
@@ -728,7 +728,7 @@ void tinyusb_control_task(void){
 
  static void drain_usb_speaker_fifo(void)
  {
-   for (uint8_t i = 0; i < 4; i++)
+   for (uint8_t i = 0; i < 8; i++)
    {
      uint16_t available = tud_audio_available();
      if (available == 0)
