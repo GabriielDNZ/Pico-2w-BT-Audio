@@ -200,11 +200,8 @@ void stop_triple_blink(void){
 #define FLASH_SIZE_BYTES      PICO_FLASH_SIZE_BYTES
 
 // We’ll write to the very last byte in flash:
-// App settings storage: keep it away from the BTstack TLV flash-bank area.
-// The Pico SDK Bluetooth flash-bank normally uses sectors near the end of flash
-// for persistent link keys. The previous build used the last sector/page too,
-// which could erase the paired headset keys. Use a dedicated sector 16 KiB
-// below the end of flash instead.
+// Keep app settings away from the final flash sectors used by BTstack flash-bank
+// for persistent Bluetooth link keys.
 #define APP_STORAGE_SECTOR_BASE (FLASH_SIZE_BYTES - (FLASH_SECTOR_SIZE * 4u))
 #define APP_STORAGE_PAGE_BASE   (APP_STORAGE_SECTOR_BASE)
 #define TARGET_OFFSET           (APP_STORAGE_PAGE_BASE + 32u)
@@ -276,16 +273,15 @@ uint8_t read_uint8_last_flash(void) {
 
 
 
-// Base of the app settings page in flash. Do not use the final sectors; BTstack
-// uses them for its persistent TLV database/link keys.
+// Base of the final 256-byte page in flash:
 #define LAST_PAGE_BASE        (APP_STORAGE_PAGE_BASE)
 // Base of its containing 4 KiB sector:
 #define LAST_SECTOR_BASE      (APP_STORAGE_SECTOR_BASE)
 
-// We carve out two 6-byte slots at the start of that page:
+// We carve out two 7-byte slots at the start of that page:
 
-#define SLOT1_OFFSET_IN_PAGE  0           // bytes [0..5]
-#define SLOT2_OFFSET_IN_PAGE  MAC_LEN     // bytes [6..11]
+#define SLOT1_OFFSET_IN_PAGE  0           // bytes [0..6]
+#define SLOT2_OFFSET_IN_PAGE  MAC_LEN     // bytes [7..13]
 
 // ─── RAM BUFFER & STATE ───────────────────────────────────────────────────────
 static uint8_t mac_page_buf[FLASH_PAGE_SIZE]
@@ -321,14 +317,14 @@ static void _read_mac_slot(uint32_t slot_offset, uint8_t mac[MAC_LEN]) {
 // ─── SLOT‐SPECIFIC APIs ────────────────────────────────────────────────────────
 
 /**
- * Read 6-byte MAC from slot #1 into `mac[]`.
+ * Read 7-byte MAC from slot #1 into `mac[]`.
  */
 void read_slot1_mac(uint8_t mac[MAC_LEN]) {
     _read_mac_slot(SLOT1_OFFSET_IN_PAGE, mac);
 }
 
 /**
- * Write 6-byte `mac[]` into slot #1.
+ * Write 7-byte `mac[]` into slot #1.
  * Returns true on success.
  */
 bool write_slot1_mac(const uint8_t mac[MAC_LEN]) {
@@ -336,14 +332,14 @@ bool write_slot1_mac(const uint8_t mac[MAC_LEN]) {
 }
 
 /**
- * Read 6-byte MAC from slot #2 into `mac[]`.
+ * Read 7-byte MAC from slot #2 into `mac[]`.
  */
 void read_slot2_mac(uint8_t mac[MAC_LEN]) {
     _read_mac_slot(SLOT2_OFFSET_IN_PAGE, mac);
 }
 
 /**
- * Write 6-byte `mac[]` into slot #2.
+ * Write 7-byte `mac[]` into slot #2.
  * Returns true on success.
  */
 bool write_slot2_mac(const uint8_t mac[MAC_LEN]) {

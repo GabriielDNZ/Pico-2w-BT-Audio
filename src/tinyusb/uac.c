@@ -148,10 +148,7 @@
  // Speaker data size received in the last frame
  int spk_data_size;
  // Resolution per format
- const uint8_t resolutions_per_format[CFG_TUD_AUDIO_FUNC_1_N_FORMATS] = {
-    CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX,
-    CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX
-};
+ const uint8_t resolutions_per_format[CFG_TUD_AUDIO_FUNC_1_N_FORMATS] = {CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX};
  // This firmware only advertises one UAC1 speaker format: stereo, 16-bit, 48 kHz.
  // Some hosts start isochronous OUT before sending the TinyUSB format callback,
  // so default to the advertised format instead of dropping the first packets.
@@ -631,8 +628,7 @@ void tinyusb_control_task(void){
    uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
    uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
  
-   if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt == 0)
-   {
+   if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt == 0) {
        blink_interval_ms = BLINK_MOUNTED;
        set_usb_endpoint_open(false);
    }
@@ -650,10 +646,13 @@ void tinyusb_control_task(void){
    uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
  
    TU_LOG2("Set interface %d alt %d\r\n", itf, alt);
-   if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt != 0)
-   {
-       blink_interval_ms = BLINK_STREAMING;
-       set_usb_endpoint_open(true);
+   if (ITF_NUM_AUDIO_STREAMING_SPK == itf) {
+       set_usb_endpoint_open(alt != 0);
+       if (alt != 0) {
+           blink_interval_ms = BLINK_STREAMING;
+       } else {
+           blink_interval_ms = BLINK_MOUNTED;
+       }
    }
 
    if (ITF_NUM_AUDIO_STREAMING_MIC == itf)
@@ -663,7 +662,11 @@ void tinyusb_control_task(void){
    spk_data_size = 0;
    if(ITF_NUM_AUDIO_STREAMING_SPK == itf && alt != 0)
    {
-     current_resolution = resolutions_per_format[alt-1];
+     if ((alt - 1) < CFG_TUD_AUDIO_FUNC_1_N_FORMATS) {
+       current_resolution = resolutions_per_format[alt-1];
+     } else {
+       current_resolution = USB_AUDIO_RESOLUTION_BITS;
+     }
    }
  
    return true;
@@ -671,8 +674,6 @@ void tinyusb_control_task(void){
 
  uint16_t usb_stop_delay = 0;
  bool is_usb_audio_running = false;
-static volatile bool usb_rx_seen = false;
-static uint32_t usb_rx_total_bytes = 0;
 
  bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting)
  {
@@ -680,73 +681,35 @@ static uint32_t usb_rx_total_bytes = 0;
    (void)func_id;
    (void)ep_out;
    (void)cur_alt_setting;
+ 
+   set_usb_endpoint_open(true);
 
-   if (n_bytes_received > sizeof(spk_buf))
-   {
-     n_bytes_received = sizeof(spk_buf);
-   }
+   spk_data_size = tud_audio_read(spk_buf, n_bytes_received);
 
-   spk_data_size = tud_audio_n_read(0, spk_buf, n_bytes_received);
-
-   if (spk_data_size >= 4)
+   if (spk_data_size)
    {
     usb_stop_delay = 0;
     is_usb_audio_running = true;
-    usb_rx_seen = true;
-    usb_rx_total_bytes += spk_data_size;
     set_usb_streaming(true);
+    set_usb_rx_seen(true);
 
     if (current_resolution == 0)
     {
       current_resolution = USB_AUDIO_RESOLUTION_BITS;
     }
 
-    if (current_resolution == USB_AUDIO_RESOLUTION_BITS)
+    if (current_resolution == USB_AUDIO_RESOLUTION_BITS && (spk_data_size % 4) == 0)
     {
-      uint16_t aligned = spk_data_size & (uint16_t)~0x03u;
       int16_t *src = (int16_t *)spk_buf;
-      uint16_t sample_count = aligned / 4;
+      uint16_t sample_count = spk_data_size / 4;
+
       audio_slot_push_samples(src, sample_count);
     }
 
     spk_data_size = 0;
-   }
-
+   } 
+ 
    return true;
- }
-
- bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting)
- {
-   (void)rhport;
-   (void)n_bytes_received;
-   (void)func_id;
-   (void)ep_out;
-   (void)cur_alt_setting;
-   // The actual FIFO drain happens in audio_task() to keep ISR light.
-   return true;
- }
-
- static void usb_audio_drain_out_fifo(void)
- {
-   for (uint8_t i = 0; i < 8; i++)
-   {
-     uint16_t available = tud_audio_n_available(0);
-     if (!available) break;
-     if (available > sizeof(spk_buf)) available = sizeof(spk_buf);
-
-     uint16_t got = tud_audio_n_read(0, spk_buf, available);
-     if (got < 4) break;
-
-     usb_stop_delay = 0;
-     is_usb_audio_running = true;
-     usb_rx_seen = true;
-     usb_rx_total_bytes += got;
-     set_usb_streaming(true);
-
-     uint16_t aligned = got & (uint16_t)~0x03u;
-     int16_t *src = (int16_t *)spk_buf;
-     audio_slot_push_samples(src, aligned / 4);
-   }
  }
 
  static void queue_mic_silence(void)
@@ -778,7 +741,6 @@ static uint32_t usb_rx_total_bytes = 0;
 
  void audio_task(void)
  {
-  usb_audio_drain_out_fifo();
   queue_mic_silence();
 
   if (is_usb_audio_running){

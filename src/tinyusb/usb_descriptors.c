@@ -14,16 +14,16 @@ tusb_desc_device_t const desc_device =
 {
     .bLength            = sizeof(tusb_desc_device_t),
     .bDescriptorType    = TUSB_DESC_DEVICE,
-    .bcdUSB             = 0x0200,
+    .bcdUSB             = USB_AUDIO_PNP_BCD_USB,
 
-    .bDeviceClass       = TUSB_CLASS_MISC,
-    .bDeviceSubClass    = MISC_SUBCLASS_COMMON,
-    .bDeviceProtocol    = MISC_PROTOCOL_IAD,
+    .bDeviceClass       = 0x00,
+    .bDeviceSubClass    = 0x00,
+    .bDeviceProtocol    = 0x00,
     .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
 
     .idVendor           = USB_AUDIO_PNP_VID,
     .idProduct          = USB_AUDIO_PNP_PID,
-    .bcdDevice          = 0x0201,
+    .bcdDevice          = USB_AUDIO_PNP_BCD_DEVICE,
 
     .iManufacturer      = 0x01,
     .iProduct           = 0x02,
@@ -77,7 +77,7 @@ uint8_t const desc_configuration[] =
       USB_AUDIO_BYTES_PER_SAMPLE, USB_AUDIO_RESOLUTION_BITS, 0x01, 0x80, 0xBB, 0x00,
     0x09, 0x05, EPNUM_AUDIO_OUT, 0x09,
       USB_AUDIO_SPK_PACKET_BYTES & 0xff, USB_AUDIO_SPK_PACKET_BYTES >> 8, 0x01, 0x00, 0x00,
-    0x07, 0x25, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x07, 0x25, 0x01, 0x01, 0x01, 0x01, 0x00,
 
     // Interface 2, microphone, Pico IN -> host. The firmware sends silence.
     0x09, 0x04, ITF_NUM_AUDIO_STREAMING_MIC, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00,
@@ -87,7 +87,7 @@ uint8_t const desc_configuration[] =
       USB_AUDIO_BYTES_PER_SAMPLE, USB_AUDIO_RESOLUTION_BITS, 0x01, 0x80, 0xBB, 0x00,
     0x09, 0x05, 0x80 | EPNUM_AUDIO_IN, 0x05,
       USB_AUDIO_MIC_PACKET_BYTES & 0xff, USB_AUDIO_MIC_PACKET_BYTES >> 8, 0x01, 0x00, 0x00,
-    0x07, 0x25, 0x01, 0x00, 0x00, 0x00, 0x00
+    0x07, 0x25, 0x01, 0x01, 0x00, 0x00, 0x00
 };
 
 TU_VERIFY_STATIC(sizeof(desc_configuration) == CONFIG_TOTAL_LEN,

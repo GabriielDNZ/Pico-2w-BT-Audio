@@ -463,6 +463,7 @@ static uint16_t slot_frame_int16  = AUDIO_SLOT_MAX_INT16; // set per codec
 
 static bool is_usb_streaming = false;
 static bool is_usb_endpoint_open = false;
+static bool is_usb_rx_seen = false;
 static bool have_ldac_codec_capabilities = false;
 static bool have_aaceld_codec_capabilities = false;
 bd_addr_t cur_active_device;
@@ -473,31 +474,37 @@ bd_addr_t cur_active_device;
 
 static void audio_slot_fill_idle_audio(int16_t *dst, uint16_t int16_count) {
 #if USB_AUDIO_IDLE_TEST_TONE
-    static uint16_t phase = 0;
+    /*
+     * Audio diagnostic through the Bluetooth headset itself:
+     *   1) continuous high beep  = USB speaker OUT endpoint is NOT open
+     *   2) slow pulsed low beep  = endpoint opened, but no USB audio packets arrived
+     *   3) short click/very low  = USB packets were seen, but the queue under-ran
+     * Real USB samples always override this tone via audio_slot_push_samples().
+     */
+    static uint32_t frame_counter = 0;
     uint16_t frames = int16_count / 2;
 
-    // Diagnostic tone:
-    // - USB streaming/data seen: silence on underrun (do not mask real audio)
-    // - endpoint opened but no data: faster/lower tone
-    // - endpoint not opened: original continuous tone
-    if (is_usb_streaming) {
-        memset(dst, 0, int16_count * sizeof(int16_t));
-        return;
-    }
-
-    uint16_t period = is_usb_endpoint_open ? 96 : 48;
-    uint16_t duty   = is_usb_endpoint_open ? 12 : 24;
-    int16_t amp     = is_usb_endpoint_open ? 1800 : 3000;
-
     for (uint16_t i = 0; i < frames; i++) {
-        int16_t sample = (phase < duty) ? amp : -amp;
+        int16_t sample = 0;
+
+        if (!is_usb_endpoint_open) {
+            // Original-style continuous beep: host did not select alt setting for speaker OUT.
+            uint16_t p = frame_counter % 48;
+            sample = (p < 24) ? 3000 : -3000;
+        } else if (!is_usb_rx_seen) {
+            // Endpoint is open, but no packets: obvious slow pulsed low beep.
+            uint16_t gate = (frame_counter / 24000) % 2;   // ~0.5 s on/off at 48 kHz
+            uint16_t p = frame_counter % 160;
+            sample = gate ? ((p < 80) ? 2200 : -2200) : 0;
+        } else {
+            // Packets were seen before, but there is temporary under-run: very quiet tick.
+            uint16_t p = frame_counter % 48000;
+            sample = (p < 80) ? 1200 : 0;
+        }
+
         dst[(i * 2) + 0] = sample;
         dst[(i * 2) + 1] = sample;
-
-        phase++;
-        if (phase >= period) {
-            phase = 0;
-        }
+        frame_counter++;
     }
 #else
     memset(dst, 0, int16_count * sizeof(int16_t));
@@ -742,6 +749,13 @@ void set_usb_streaming(bool flag){
 
 void set_usb_endpoint_open(bool flag){
     is_usb_endpoint_open = flag;
+    if (!flag) {
+        is_usb_rx_seen = false;
+    }
+}
+
+void set_usb_rx_seen(bool flag){
+    is_usb_rx_seen = flag;
 }
 
 bool get_allow_switch_slot(){
