@@ -1,0 +1,12 @@
+LOW-DELAY SBC110 AAC35 AUTORECONNECT FASTSTART
+
+Base: SBC105 AAC35, because SBC120 stopped working while AAC still worked.
+
+Changes:
+- SBC target: 105 -> 110 ms
+- BT_KEEPALIVE_SILENCE_IDLE_MS: 105 -> 110
+- AUDIO_SLOT_COUNT_SBC: 18 -> 19
+- audio_timer_interval: kept at 11 ms for stability
+- SBC_LOW_DELAY_FRAMES_PER_PACKET: kept at 7 for stability
+- AAC-LC/AAC-ELD: unchanged from AAC35 profile
+- Autoreconnect/FastStart kept enabled
