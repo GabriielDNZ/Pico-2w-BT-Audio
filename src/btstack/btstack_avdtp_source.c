@@ -47,6 +47,7 @@
 #include "btstack.h"
 #include "btstack_avdtp_source.h"
 #include "pico/multicore.h"
+#include "pico/time.h"
 #include "pico/util/queue.h"
 
 #include "btstack_hci.h"
@@ -76,6 +77,14 @@
 #define AVDTP_MAX_MEDIA_CODEC_CAPABILITES_EVENT_LEN 100
 
 #define VOLUME_REDUCTION 2
+
+// UAC1/A2DP low-delay safety knobs
+// 2 SBC frames per RTP packet keeps delay much lower than waiting for a full payload.
+// If the USB host stops sending packets, send clean SBC silence after a short idle
+// period to keep the Bluetooth A2DP stream alive. Micro-gaps below this are not
+// filled with silence, which avoids the old picote/distorção.
+#define SBC_LOW_DELAY_FRAMES_PER_PACKET 2
+#define BT_KEEPALIVE_SILENCE_IDLE_MS 30
 
 typedef struct {
     // bitmaps
@@ -460,6 +469,7 @@ static uint8_t  filling_slot_idx;
 static uint16_t filling_offset    = 0;
 static bool     filling_slot_valid = false;
 static uint16_t slot_frame_int16  = AUDIO_SLOT_MAX_INT16; // set per codec
+static volatile uint32_t last_usb_pcm_ms = 0;
 
 static bool is_usb_streaming = false;
 static bool have_ldac_codec_capabilities = false;
@@ -538,6 +548,9 @@ void audio_slot_queue_configure(uint16_t samples_per_slot) {
 }
 
 void audio_slot_push_samples(const int16_t *src, uint16_t stereo_pair_count) {
+    if (stereo_pair_count > 0) {
+        last_usb_pcm_ms = to_ms_since_boot(get_absolute_time());
+    }
     uint16_t remaining = stereo_pair_count * 2; // total int16_t values
     uint16_t src_offset = 0;
 
@@ -572,16 +585,31 @@ void audio_slot_push_samples(const int16_t *src, uint16_t stereo_pair_count) {
     }
 }
 
-// BT-side helpers: pop a ready slot or get a silence slot
-static bool audio_slot_pop(uint8_t *slot_idx) {
-    if (queue_try_remove(&ready_queue, slot_idx)) {
-        return true;
-    }
-    // No data ready — produce silence
+// BT-side helpers
+static bool audio_slot_pop_real(uint8_t *slot_idx) {
+    return queue_try_remove(&ready_queue, slot_idx);
+}
+
+static bool audio_slot_pop_silence(uint8_t *slot_idx) {
     if (queue_try_remove(&free_queue, slot_idx)) {
         memset(slot_pool[*slot_idx].data, 0, slot_frame_int16 * sizeof(int16_t));
         return true;
     }
+    return false;
+}
+
+// Pop real audio. Only generate silence after a real idle period.
+// This keeps A2DP alive without inserting silence into tiny USB jitter gaps.
+static bool audio_slot_pop_keepalive(uint8_t *slot_idx) {
+    if (audio_slot_pop_real(slot_idx)) {
+        return true;
+    }
+
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    if (last_usb_pcm_ms == 0 || (uint32_t)(now - last_usb_pcm_ms) >= BT_KEEPALIVE_SILENCE_IDLE_MS) {
+        return audio_slot_pop_silence(slot_idx);
+    }
+
     return false;
 }
 
@@ -637,7 +665,7 @@ void core1_aaceld_encoder_loop(void) {
 
         // Get a raw audio slot (real data or silence)
         uint8_t raw_slot_idx;
-        if (!audio_slot_pop(&raw_slot_idx)) {
+        if (!audio_slot_pop_keepalive(&raw_slot_idx)) {
             sleep_us(500);
             continue;
         }
@@ -710,16 +738,21 @@ bool get_allow_switch_slot(){
 static int fill_sbc_audio_buffer(a2dp_media_sending_context_t * context){
     int total_num_bytes_read = 0;
     unsigned int num_audio_samples_per_sbc_buffer = btstack_sbc_encoder_num_audio_frames();
+    uint16_t sbc_frame_size = btstack_sbc_encoder_sbc_buffer_length();
+
+    // Low-delay: do not wait for a full A2DP payload. Send a small packet as soon
+    // as we have a couple of SBC frames. This reduces queueing delay.
+    uint8_t frames_encoded_this_packet = 0;
 
     while (context->samples_ready >= num_audio_samples_per_sbc_buffer &&
-           (context->max_media_payload_size - context->codec_storage_count) >= btstack_sbc_encoder_sbc_buffer_length()){
+           frames_encoded_this_packet < SBC_LOW_DELAY_FRAMES_PER_PACKET &&
+           (context->max_media_payload_size - context->codec_storage_count) >= sbc_frame_size){
 
         uint8_t slot_idx;
-        if (!audio_slot_pop(&slot_idx)) break;
+        if (!audio_slot_pop_keepalive(&slot_idx)) break;
 
         btstack_sbc_encoder_process_data(slot_pool[slot_idx].data);
 
-        uint16_t sbc_frame_size = btstack_sbc_encoder_sbc_buffer_length();
         uint8_t * sbc_frame = btstack_sbc_encoder_sbc_buffer();
 
         total_num_bytes_read += num_audio_samples_per_sbc_buffer;
@@ -727,6 +760,7 @@ static int fill_sbc_audio_buffer(a2dp_media_sending_context_t * context){
         memcpy(&context->codec_storage[1 + context->codec_storage_count], sbc_frame, sbc_frame_size);
         context->codec_storage_count += sbc_frame_size;
         context->samples_ready -= num_audio_samples_per_sbc_buffer;
+        frames_encoded_this_packet++;
 
         audio_slot_release(slot_idx);
     }
@@ -748,7 +782,7 @@ static int a2dp_demo_fill_ldac_audio_buffer(a2dp_media_sending_context_t *contex
     while (context->samples_ready >= num_audio_samples_per_ldac_buffer && encoded == 0) {
 
         uint8_t slot_idx;
-        if (!audio_slot_pop(&slot_idx)) break;
+        if (!audio_slot_pop_keepalive(&slot_idx)) break;
 
         if (ldacBT_encode(handleLDAC, slot_pool[slot_idx].data, &consumed, &context->codec_storage[context->codec_storage_count], &encoded, &frames) != 0) {
             printf("LDAC encoding error: %d\n", ldacBT_get_error_code(handleLDAC));
@@ -809,7 +843,7 @@ static int fill_aac_audio_buffer(a2dp_media_sending_context_t *context) {
            (context->max_media_payload_size - context->codec_storage_count) > min_space) {
 
         uint8_t slot_idx;
-        if (!audio_slot_pop(&slot_idx)) break;
+        if (!audio_slot_pop_keepalive(&slot_idx)) break;
 
         int hdr_offset = context->codec_storage_count + aaceld_hdr_size;
 
@@ -887,8 +921,13 @@ static void avdtp_audio_timeout_handler(btstack_timer_source_t * timer){
     context->time_audio_data_sent = now;
     context->samples_ready += num_samples;
 
-    // Cap to prevent unbounded accumulation when USB audio pauses
+    avdtp_media_codec_type_t codec_type = sc.local_stream_endpoint->remote_configuration.media_codec.media_codec_type;
+
+    // Cap to prevent backlog/latency accumulation when USB audio pauses or BT stalls.
     uint32_t max_ready = 4 * acc_num_simples;
+    if (codec_type == AVDTP_CODEC_SBC) {
+        max_ready = SBC_LOW_DELAY_FRAMES_PER_PACKET * btstack_sbc_encoder_num_audio_frames();
+    }
     if (context->samples_ready > max_ready) {
         context->samples_ready = max_ready;
     }
@@ -970,14 +1009,12 @@ static void avdtp_audio_timeout_handler(btstack_timer_source_t * timer){
         fail_count = 0;  // reset on successful send
     }
 
-    avdtp_media_codec_type_t codec_type = sc.local_stream_endpoint->remote_configuration.media_codec.media_codec_type;
-
     switch (codec_type){
 
         case AVDTP_CODEC_SBC:
             fill_sbc_audio_buffer(context);
-            if ((context->codec_storage_count + btstack_sbc_encoder_sbc_buffer_length()) > context->max_media_payload_size){
-                // schedule sending
+            if (context->codec_storage_count >= (btstack_sbc_encoder_sbc_buffer_length() * SBC_LOW_DELAY_FRAMES_PER_PACKET)){
+                // Low-delay: send a small SBC packet instead of waiting until payload is full.
                 context->codec_ready_to_send = 1;
                 a2dp_source_stream_endpoint_request_can_send_now(context->avdtp_cid, context->local_seid);
             }
@@ -1480,7 +1517,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 sbc_configuration.max_bitpool_value,
                 sbc_configuration.channel_mode);
 
-            audio_timer_interval = 10;
+            audio_timer_interval = 5;  // low-delay SBC pacing
 
             audio_slot_queue_configure_with_count(btstack_sbc_encoder_num_audio_frames(), AUDIO_SLOT_COUNT_SBC);
 

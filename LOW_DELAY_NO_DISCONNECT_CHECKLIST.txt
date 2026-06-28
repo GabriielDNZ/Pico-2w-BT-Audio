@@ -1,0 +1,9 @@
+LOW-DELAY NO-DISCONNECT
+
+- SBC queue capacity reduced to 6 slots (~16 ms raw PCM capacity at 48 kHz, 128-sample SBC frames).
+- SBC timer changed to 5 ms for lower latency.
+- SBC packets are sent after 2 SBC frames instead of waiting for the RTP payload to fill.
+- Real audio is consumed only from ready_queue.
+- Silence is NOT inserted for tiny gaps.
+- If USB audio is idle for 30 ms, clean silence is encoded to keep A2DP alive and avoid Bluetooth disconnects.
+- If PS5 sends normal silent PCM packets, they pass as real audio and should not disconnect.
