@@ -10,7 +10,7 @@
 
 // Slot queue constants
 #define AUDIO_SLOT_COUNT_SBC   6    // SBC 30 ms slots6: keep timer=5 and frames=4
-#define AUDIO_SLOT_COUNT_AAC   1    // AAC-LC low-delay: 1 frame = 1024/48000 = 21.3ms (~22ms)
+#define AUDIO_SLOT_COUNT_AAC   1    // AAC-LC low-delay: 1 frame = 1024/48000 = 21.3ms; timer=4ms
 #define AUDIO_SLOT_COUNT_ELD   6    // AAC-ELD: 480 samples/slot, 6*10ms = 60ms buffer
 #define AUDIO_SLOT_COUNT_LDAC  16   // LDAC: 256 samples/slot, 16*5.3ms = 85ms buffer
 #define AUDIO_SLOT_COUNT_MAX   24   // pool size must still cover non-SBC codecs

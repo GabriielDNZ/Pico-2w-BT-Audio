@@ -84,6 +84,7 @@
 // period to keep the Bluetooth A2DP stream alive. Micro-gaps below this are not
 // filled with silence, which avoids the old picote/distorção.
 #define SBC_LOW_DELAY_FRAMES_PER_PACKET 4
+#define AAC_FRAMES_PER_PACKET 1
 #define BT_KEEPALIVE_SILENCE_IDLE_MS 30
 
 typedef struct {
@@ -229,7 +230,7 @@ static bool finish_scan_avdtp_codec = false;
 static uint8_t audio_timer_interval = 8;
 
 // on pico 2w the max stable aac bit rate under 512 simples without vbr is around 220000
-static uint8_t aac_audio_timer_interval = 22;
+static uint8_t aac_audio_timer_interval = 4;
 static uint16_t acc_num_simples = 1024;
 static int max_aac_bit_rate = 220000;
 static int aac_bit_rate = 192000;
@@ -883,8 +884,8 @@ static int fill_aac_audio_buffer(a2dp_media_sending_context_t *context) {
 
         audio_slot_release(slot_idx);
 
-        // AAC-LC low-delay: send one 1024-sample frame per RTP packet (~21.3 ms).
-        if (cur_codec == 2 && context->codec_num_frames >= 1) break;
+        // AAC-LC low-delay: send AAC_FRAMES_PER_PACKET frame(s) per RTP packet.
+        if (cur_codec == 2 && context->codec_num_frames >= AAC_FRAMES_PER_PACKET) break;
 
         // AAC-ELD: max 3 frames per RTP packet
         if (cur_codec == 4 && context->codec_num_frames >= 3) break;
@@ -931,9 +932,9 @@ static void avdtp_audio_timeout_handler(btstack_timer_source_t * timer){
     if (codec_type == AVDTP_CODEC_SBC) {
         max_ready = SBC_LOW_DELAY_FRAMES_PER_PACKET * btstack_sbc_encoder_num_audio_frames();
     } else if (codec_type == AVDTP_CODEC_MPEG_2_4_AAC) {
-        // AAC-LC low-delay profile: keep only one AAC frame queued.
-        // 1024 samples / 48000 Hz = 21.3 ms; timer uses 22 ms margin.
-        max_ready = acc_num_simples;
+        // AAC-LC low-delay profile: keep only AAC_FRAMES_PER_PACKET frame(s) queued.
+        // 1024 samples / 48000 Hz = 21.3 ms. Timer is intentionally 4 ms.
+        max_ready = AAC_FRAMES_PER_PACKET * acc_num_simples;
     }
     if (context->samples_ready > max_ready) {
         context->samples_ready = max_ready;
