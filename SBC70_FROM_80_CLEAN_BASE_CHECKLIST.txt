@@ -1,0 +1,14 @@
+SBC70 FROM 80 CLEAN BASE
+
+Base:
+- Pico-2w-BT-Audio-PS5-UAC1-LOW-DELAY-BALANCED-80MS-github(1).zip
+
+Changed only SBC buffer/idle target:
+- BT_KEEPALIVE_SILENCE_IDLE_MS: 80 -> 70
+- AUDIO_SLOT_COUNT_SBC: 12 -> 11
+
+Kept exactly like the clean 80 ms base:
+- audio_timer_interval initial remains 8
+- real SBC selected block remains audio_timer_interval = 5
+- SBC_LOW_DELAY_FRAMES_PER_PACKET remains 4
+- AAC/AAC-ELD/LDAC unchanged

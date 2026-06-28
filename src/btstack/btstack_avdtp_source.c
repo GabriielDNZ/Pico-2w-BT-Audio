@@ -79,12 +79,12 @@
 #define VOLUME_REDUCTION 2
 
 // UAC1/A2DP low-delay safety knobs
-// 3 SBC frames per RTP packet is the 60 ms balanced profile: lower delay than 80 ms, safer than 30 ms.
+// 2 SBC frames per RTP packet keeps delay much lower than waiting for a full payload.
 // If the USB host stops sending packets, send clean SBC silence after a short idle
 // period to keep the Bluetooth A2DP stream alive. Micro-gaps below this are not
 // filled with silence, which avoids the old picote/distorção.
-#define SBC_LOW_DELAY_FRAMES_PER_PACKET 7
-#define BT_KEEPALIVE_SILENCE_IDLE_MS 115
+#define SBC_LOW_DELAY_FRAMES_PER_PACKET 4
+#define BT_KEEPALIVE_SILENCE_IDLE_MS 70
 
 typedef struct {
     // bitmaps
@@ -226,10 +226,10 @@ static bool a2dp_is_connected_flag = false;
 
 static bool finish_scan_avdtp_codec = false;
 
-static uint8_t audio_timer_interval = 11;
+static uint8_t audio_timer_interval = 8;
 
 // on pico 2w the max stable aac bit rate under 512 simples without vbr is around 220000
-static uint8_t aac_audio_timer_interval = 4;
+static uint8_t aac_audio_timer_interval = 12;
 static uint16_t acc_num_simples = 1024;
 static int max_aac_bit_rate = 220000;
 static int aac_bit_rate = 192000;
@@ -501,49 +501,7 @@ static btstack_timer_source_t suspend_recovery_timer;
 static bool suspend_recovery_pending = false;
 #define SUSPEND_RECOVERY_TIMEOUT_MS 3000
 
-// Auto reconnect to the last paired sink. This is intentionally separate from
-// avdtp_disconnect_and_scan(): long press still clears the stored MAC and starts
-// pairing, but normal link loss / PS5 power cycle should reconnect automatically.
-static btstack_timer_source_t a2dp_reconnect_timer;
-static bool a2dp_auto_reconnect_enabled = true;
-#define A2DP_RECONNECT_DELAY_MS      1200
-#define A2DP_RECONNECT_FAIL_DELAY_MS 2500
-
 static void a2dp_demo_timer_start(a2dp_media_sending_context_t * context);
-static void a2dp_demo_timer_stop(a2dp_media_sending_context_t * context);
-
-static bool bd_addr_is_zero_reconnect(const bd_addr_t addr){
-    for (int i = 0; i < 6; i++){
-        if (addr[i] != 0x00 && addr[i] != 0xFF){
-            return false;
-        }
-    }
-    return true;
-}
-
-static void cancel_a2dp_auto_reconnect(void){
-    btstack_run_loop_remove_timer(&a2dp_reconnect_timer);
-}
-
-static void a2dp_reconnect_timeout_handler(btstack_timer_source_t *timer){
-    (void)timer;
-    if (!a2dp_auto_reconnect_enabled) return;
-    if (a2dp_is_connected_flag) return;
-    if (bd_addr_is_zero_reconnect(*get_device_addr())) return;
-
-    printf("A2DP auto reconnect to %s...\n", get_device_addr_string());
-    audio_slot_queue_init();
-    avdtp_source_connect((uint8_t *) get_device_addr(), &media_tracker.avdtp_cid);
-}
-
-static void schedule_a2dp_auto_reconnect(uint32_t delay_ms){
-    if (!a2dp_auto_reconnect_enabled) return;
-    if (bd_addr_is_zero_reconnect(*get_device_addr())) return;
-    btstack_run_loop_remove_timer(&a2dp_reconnect_timer);
-    btstack_run_loop_set_timer_handler(&a2dp_reconnect_timer, a2dp_reconnect_timeout_handler);
-    btstack_run_loop_set_timer(&a2dp_reconnect_timer, delay_ms);
-    btstack_run_loop_add_timer(&a2dp_reconnect_timer);
-}
 
 static void suspend_recovery_handler(btstack_timer_source_t *timer) {
     (void)timer;
@@ -934,6 +892,7 @@ static int fill_aac_audio_buffer(a2dp_media_sending_context_t *context) {
 #endif
 
 static void a2dp_demo_timer_pause(a2dp_media_sending_context_t * context);
+static void a2dp_demo_timer_stop(a2dp_media_sending_context_t * context);
 
 static void avdtp_audio_timeout_handler(btstack_timer_source_t * timer){
 
@@ -1283,13 +1242,9 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             avdtp_cid = avdtp_subevent_signaling_connection_established_get_avdtp_cid(packet);
             status = avdtp_subevent_signaling_connection_established_get_status(packet);
             if (status != 0){
-                printf("AVDTP source signaling connection failed: status %d; retrying...\n", status);
-                a2dp_is_connected_flag = false;
-                schedule_a2dp_auto_reconnect(A2DP_RECONNECT_FAIL_DELAY_MS);
+                printf("AVDTP source signaling connection failed: status %d\n", status);
                 break;
             }
-            cancel_a2dp_auto_reconnect();
-            a2dp_auto_reconnect_enabled = true;
             media_tracker.avdtp_cid = avdtp_subevent_signaling_connection_established_get_avdtp_cid(packet);
             printf("AVDTP source signaling connection established: avdtp_cid 0x%02x\n", avdtp_cid);
 
@@ -1309,14 +1264,9 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
         case AVDTP_SUBEVENT_STREAMING_CONNECTION_ESTABLISHED:
             status = avdtp_subevent_streaming_connection_established_get_status(packet);
             if (status != 0){
-                printf("Streaming connection failed: status %d; reconnecting...\n", status);
-                a2dp_demo_timer_stop(&media_tracker);
-                a2dp_is_connected_flag = false;
-                avdtp_source_disconnect(media_tracker.avdtp_cid);
-                schedule_a2dp_auto_reconnect(A2DP_RECONNECT_FAIL_DELAY_MS);
+                printf("Streaming connection failed: status %d\n", status);
                 break;
             }
-            cancel_a2dp_auto_reconnect();
             avdtp_cid = avdtp_subevent_streaming_connection_established_get_avdtp_cid(packet);
             media_tracker.local_seid = avdtp_subevent_streaming_connection_established_get_local_seid(packet);
             media_tracker.remote_seid = avdtp_subevent_streaming_connection_established_get_remote_seid(packet);
@@ -1567,7 +1517,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 sbc_configuration.max_bitpool_value,
                 sbc_configuration.channel_mode);
 
-            audio_timer_interval = 11;  // safe SBC 115 ms pacing; keep packet size below broken 120 ms profile
+            audio_timer_interval = 5;  // low-delay SBC pacing
 
             audio_slot_queue_configure_with_count(btstack_sbc_encoder_num_audio_frames(), AUDIO_SLOT_COUNT_SBC);
 
@@ -1807,7 +1757,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 
                 current_sample_rate = 48000;
                 acc_num_simples = aacinf.frameLength;  // use actual frame size from encoder
-                audio_timer_interval = 10;  // AAC-ELD: 10 ms frame pacing, 4 slots ~= 40 ms buffer (closest stable to 35 ms)
+                audio_timer_interval = 10;
 
                 printf("AAC-ELD acc_num_simples=%d\n", acc_num_simples);
 
@@ -1848,7 +1798,6 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     break;
                 case  AVDTP_SI_START:
                     printf("Stream started.\n");
-                    cancel_a2dp_auto_reconnect();
                     if (finish_scan_avdtp_codec){
                         a2dp_demo_timer_start(&media_tracker);
                         is_streaming = true;
@@ -1915,8 +1864,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             have_ldac_codec_capabilities = false;
             have_aaceld_codec_capabilities = false;
             finish_setup_aac = false;
-            printf("Signaling connection released. Auto-reconnect armed.\n");
-            schedule_a2dp_auto_reconnect(A2DP_RECONNECT_DELAY_MS);
+            printf("Signaling connection released.\n");
             break;
         default:
             break;
@@ -2440,8 +2388,6 @@ static int setup_aaceld_configuration(){
 
 
 void avdtp_disconnect_and_scan(){
-    a2dp_auto_reconnect_enabled = false;
-    cancel_a2dp_auto_reconnect();
     a2dp_demo_timer_stop(&media_tracker);
     a2dp_source_disconnect(media_tracker.avdtp_cid);
     avrcp_disconnect(media_tracker.avdtp_cid);
@@ -2465,18 +2411,14 @@ void avdtp_disconnect_and_scan(){
 }
 
 void a2dp_source_reconnect(){
-    a2dp_auto_reconnect_enabled = true;
-    cancel_a2dp_auto_reconnect();
-    audio_slot_queue_init();
+    //sleep_ms(500);
     avdtp_source_connect((uint8_t *) get_device_addr(), &media_tracker.avdtp_cid);
+    sleep_ms(200);
     //printf(" Create A2DP Source connection to addr %s, cid 0x%02x.\n", bd_addr_to_str(device_addr), media_tracker.a2dp_cid);
 }
 
 
 void avdtp_source_establish_stream(){
-    a2dp_auto_reconnect_enabled = true;
-    cancel_a2dp_auto_reconnect();
-    audio_slot_queue_init();
     avdtp_source_connect((uint8_t *) get_device_addr(), &media_tracker.avdtp_cid);
 }
 
