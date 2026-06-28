@@ -466,9 +466,11 @@ static bool have_ldac_codec_capabilities = false;
 static bool have_aaceld_codec_capabilities = false;
 bd_addr_t cur_active_device;
 
-// Diagnostic build: if the Bluetooth stream is alive but no USB speaker
-// packets reach the queue, generate a low test tone instead of silence.
-#define USB_AUDIO_IDLE_TEST_TONE 0
+
+// Diagnostic fallback: the first tone build proved Bluetooth/A2DP is alive.
+// Keep the fallback tone enabled so silence means a real crash/disconnect,
+// while a beep means USB OUT audio packets are still not reaching the queue.
+#define USB_AUDIO_IDLE_TEST_TONE 1
 
 static void audio_slot_fill_idle_audio(int16_t *dst, uint16_t int16_count) {
 #if USB_AUDIO_IDLE_TEST_TONE
@@ -2411,11 +2413,8 @@ void avdtp_source_establish_stream(){
 
 
 int set_next_codec(uint8_t num){
-    // Force the mandatory A2DP SBC path while debugging PS5/UAC1 audio.
-    // This avoids LDAC/AAC/AAC-ELD negotiation differences between headsets.
-    (void)num;
-    return setup_sbc_configuration();
-
+    //return 0;
+    //return setup_sbc_configuration();
     switch (num){
         case 0: // AAC-ELD > LDAC > AAC > SBC
             if (have_aaceld_codec_capabilities){
@@ -2531,8 +2530,11 @@ static void avrcp_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t 
             
             printf("Enable Volume Change notification\n");
             avrcp_controller_enable_notification(media_tracker.avrcp_cid, AVRCP_NOTIFICATION_EVENT_VOLUME_CHANGED);
-            media_tracker.volume = 127;
-            avrcp_controller_set_absolute_volume(media_tracker.avrcp_cid, media_tracker.volume);
+            // Set initial volume to 50% on first connection
+            if (media_tracker.volume == 0 || media_tracker.volume == 127) {
+                media_tracker.volume = 64;  // ~50% (0-127 range)
+                avrcp_controller_set_absolute_volume(media_tracker.avrcp_cid, media_tracker.volume);
+            }
             printf("Enable Battery Status Change notification\n");
             avrcp_controller_enable_notification(media_tracker.avrcp_cid, AVRCP_NOTIFICATION_EVENT_BATT_STATUS_CHANGED);
             return;

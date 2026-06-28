@@ -1,9 +1,6 @@
-/*
- * USB descriptors for the UAC1 headset build.
- */
+/* USB Audio Class 1.0 speaker-only descriptors. */
 
 #include <string.h>
-
 #include "tusb.h"
 #include "usb_descriptors.h"
 
@@ -41,53 +38,44 @@ uint8_t const * tud_descriptor_device_cb(void)
 // Configuration Descriptor
 //--------------------------------------------------------------------+
 #define EPNUM_AUDIO_OUT    0x01
-#define EPNUM_AUDIO_IN     0x02
 
-#define AUDIO10_DESC_LEN   192
+// IAD + Standard AC + CS AC tree + AS alt0/alt1 + ISO OUT endpoint.
+#define AUDIO10_DESC_LEN   109
 #define CONFIG_TOTAL_LEN   (TUD_CONFIG_DESC_LEN + AUDIO10_DESC_LEN)
 
 uint8_t const desc_configuration[] =
 {
-    // Config number, interface count, string index, total length, attributes, power in mA
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
 
-    // UAC1 headset descriptor: speaker OUT + microphone IN.
+    // IAD for Audio function: AC + speaker streaming.
     0x08, 0x0B, ITF_NUM_AUDIO_CONTROL, ITF_NUM_TOTAL, 0x01, 0x01, 0x00, 0x02,
+
+    // Standard AC interface.
     0x09, 0x04, ITF_NUM_AUDIO_CONTROL, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00,
-    0x0A, 0x24, 0x01, 0x00, 0x01, 0x47, 0x00, 0x02,
-      ITF_NUM_AUDIO_STREAMING_SPK, ITF_NUM_AUDIO_STREAMING_MIC,
+
+    // Class-specific AC header, UAC1, wTotalLength=0x0029, one streaming interface.
+    0x09, 0x24, 0x01, 0x00, 0x01, 0x28, 0x00, 0x01, ITF_NUM_AUDIO_STREAMING_SPK,
+
+    // Speaker path: USB Streaming Input Terminal -> Feature Unit -> Speaker Output Terminal.
     0x0C, 0x24, 0x02, UAC1_ENTITY_SPK_INPUT_TERMINAL,
-      0x01, 0x01, 0x00, 0x02, 0x03, 0x00, 0x00, 0x00,
+      0x01, 0x01, 0x00, USB_AUDIO_SPK_CHANNELS, 0x03, 0x00, 0x00, 0x00,
     0x0A, 0x24, 0x06, UAC1_ENTITY_SPK_FEATURE_UNIT,
       UAC1_ENTITY_SPK_INPUT_TERMINAL, 0x01, 0x03, 0x03, 0x03, 0x00,
     0x09, 0x24, 0x03, UAC1_ENTITY_SPK_OUTPUT_TERMINAL,
       0x01, 0x03, 0x00, UAC1_ENTITY_SPK_FEATURE_UNIT, 0x00,
-    0x0C, 0x24, 0x02, UAC1_ENTITY_MIC_INPUT_TERMINAL,
-      0x01, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x09, 0x24, 0x06, UAC1_ENTITY_MIC_FEATURE_UNIT,
-      UAC1_ENTITY_MIC_INPUT_TERMINAL, 0x01, 0x03, 0x03, 0x00,
-    0x09, 0x24, 0x03, UAC1_ENTITY_MIC_OUTPUT_TERMINAL,
-      0x01, 0x01, 0x00, UAC1_ENTITY_MIC_FEATURE_UNIT, 0x00,
 
-    // Interface 1, speaker/playback, host OUT -> Pico.
+    // AudioStreaming interface alt 0: zero bandwidth.
     0x09, 0x04, ITF_NUM_AUDIO_STREAMING_SPK, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00,
+
+    // AudioStreaming interface alt 1: stereo 16-bit 48 kHz PCM OUT.
     0x09, 0x04, ITF_NUM_AUDIO_STREAMING_SPK, 0x01, 0x01, 0x01, 0x02, 0x00, 0x00,
     0x07, 0x24, 0x01, UAC1_ENTITY_SPK_INPUT_TERMINAL, 0x01, 0x01, 0x00,
     0x0B, 0x24, 0x02, 0x01, USB_AUDIO_SPK_CHANNELS,
       USB_AUDIO_BYTES_PER_SAMPLE, USB_AUDIO_RESOLUTION_BITS, 0x01, 0x80, 0xBB, 0x00,
+    // Iso OUT, adaptive, 1ms, 192 bytes/frame.
     0x09, 0x05, EPNUM_AUDIO_OUT, 0x09,
       USB_AUDIO_SPK_PACKET_BYTES & 0xff, USB_AUDIO_SPK_PACKET_BYTES >> 8, 0x01, 0x00, 0x00,
-    0x07, 0x25, 0x01, 0x01, 0x01, 0x01, 0x00,
-
-    // Interface 2, microphone, Pico IN -> host. The firmware sends silence.
-    0x09, 0x04, ITF_NUM_AUDIO_STREAMING_MIC, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00,
-    0x09, 0x04, ITF_NUM_AUDIO_STREAMING_MIC, 0x01, 0x01, 0x01, 0x02, 0x00, 0x00,
-    0x07, 0x24, 0x01, UAC1_ENTITY_MIC_OUTPUT_TERMINAL, 0x01, 0x01, 0x00,
-    0x0B, 0x24, 0x02, 0x01, USB_AUDIO_MIC_CHANNELS,
-      USB_AUDIO_BYTES_PER_SAMPLE, USB_AUDIO_RESOLUTION_BITS, 0x01, 0x80, 0xBB, 0x00,
-    0x09, 0x05, 0x80 | EPNUM_AUDIO_IN, 0x05,
-      USB_AUDIO_MIC_PACKET_BYTES & 0xff, USB_AUDIO_MIC_PACKET_BYTES >> 8, 0x01, 0x00, 0x00,
-    0x07, 0x25, 0x01, 0x01, 0x00, 0x00, 0x00
+    0x07, 0x25, 0x01, 0x01, 0x01, 0x01, 0x00
 };
 
 TU_VERIFY_STATIC(sizeof(desc_configuration) == CONFIG_TOTAL_LEN,
@@ -130,23 +118,14 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
   }
   else
   {
-    if (!(index < sizeof(string_desc_arr) / sizeof(string_desc_arr[0])))
-    {
-      return NULL;
-    }
+    if (!(index < sizeof(string_desc_arr) / sizeof(string_desc_arr[0]))) return NULL;
 
     const char *str = string_desc_arr[index];
     chr_count = strlen(str);
     size_t const max_count = sizeof(_desc_str) / sizeof(_desc_str[0]) - 1;
-    if (chr_count > max_count)
-    {
-      chr_count = max_count;
-    }
+    if (chr_count > max_count) chr_count = max_count;
 
-    for (size_t i = 0; i < chr_count; i++)
-    {
-      _desc_str[1 + i] = str[i];
-    }
+    for (size_t i = 0; i < chr_count; i++) _desc_str[1 + i] = str[i];
   }
 
   _desc_str[0] = (uint16_t)((TUSB_DESC_STRING << 8) | (2 * chr_count + 2));

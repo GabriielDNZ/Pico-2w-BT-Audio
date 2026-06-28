@@ -153,83 +153,6 @@
  // Some hosts start isochronous OUT before sending the TinyUSB format callback,
  // so default to the advertised format instead of dropping the first packets.
  uint8_t current_resolution = USB_AUDIO_RESOLUTION_BITS;
-
- uint16_t usb_stop_delay = 0;
- bool is_usb_audio_running = false;
-
- static volatile bool usb_out_endpoint_open = false;
- static volatile bool usb_rx_isr_seen = false;
- static uint32_t usb_rx_total_bytes = 0;
- static uint32_t usb_rx_last_log_ms = 0;
-
- static void usb_audio_accept_out_bytes(uint16_t bytes_read)
- {
-   if (bytes_read < 4)
-   {
-     return;
-   }
-
-   uint16_t aligned_bytes = bytes_read & (uint16_t)~0x03u;
-   if (!aligned_bytes)
-   {
-     return;
-   }
-
-   usb_stop_delay = 0;
-   is_usb_audio_running = true;
-   set_usb_streaming(true);
-
-   if (current_resolution == 0)
-   {
-     current_resolution = USB_AUDIO_RESOLUTION_BITS;
-   }
-
-   if (current_resolution == USB_AUDIO_RESOLUTION_BITS)
-   {
-     int16_t *src = (int16_t *)spk_buf;
-     uint16_t stereo_frames = aligned_bytes / 4; // 2ch * 16-bit
-     audio_slot_push_samples(src, stereo_frames);
-     usb_rx_total_bytes += aligned_bytes;
-   }
- }
-
- static void usb_audio_drain_out_fifo(void)
- {
-   // TinyUSB stores received isochronous OUT packets in its audio RX FIFO.
-   // The previous build relied mostly on the pre-read callback. This version
-   // also drains the FIFO from the normal task, which is the safer path for
-   // Pico SDK / TinyUSB audio10 UAC1 descriptors.
-   for (uint8_t i = 0; i < 8; i++)
-   {
-     uint16_t available = tud_audio_n_available(0);
-     if (available == 0)
-     {
-       break;
-     }
-
-     if (available > sizeof(spk_buf))
-     {
-       available = sizeof(spk_buf);
-     }
-
-     uint16_t got = tud_audio_n_read(0, spk_buf, available);
-     if (got == 0)
-     {
-       break;
-     }
-     usb_audio_accept_out_bytes(got);
-   }
-
-   uint32_t now = board_millis();
-   if ((now - usb_rx_last_log_ms) > 5000)
-   {
-     usb_rx_last_log_ms = now;
-     printf("USB OUT status: open=%u isr=%u total=%lu bytes\n",
-            usb_out_endpoint_open ? 1 : 0,
-            usb_rx_isr_seen ? 1 : 0,
-            (unsigned long)usb_rx_total_bytes);
-   }
- }
  
  //void led_blinking_task(void);
  void audio_task(void);
@@ -485,7 +408,8 @@ void tinyusb_control_task(void){
 
  static bool uac1_is_mic_feature_unit(uint8_t entity)
  {
-   return entity == UAC1_ENTITY_MIC_FEATURE_UNIT;
+   (void)entity;
+   return false;
  }
 
  static uint8_t uac1_clamp_channel(uint8_t channel, uint8_t max_channels)
@@ -624,7 +548,7 @@ void tinyusb_control_task(void){
    uint8_t const control = UAC_REQ_CONTROL(p_request);
    uint8_t const request = p_request->bRequest;
 
-   if ((ep != 0x01 && ep != 0x82) || control != AUDIO10_EP_CTRL_SAMPLING_FREQ)
+   if (ep != 0x01 || control != AUDIO10_EP_CTRL_SAMPLING_FREQ)
    {
      return false;
    }
@@ -651,7 +575,7 @@ void tinyusb_control_task(void){
    uint8_t const ep = UAC_REQ_ENDPOINT(p_request);
    uint8_t const control = UAC_REQ_CONTROL(p_request);
 
-   if ((ep != 0x01 && ep != 0x82) ||
+   if (ep != 0x01 ||
        control != AUDIO10_EP_CTRL_SAMPLING_FREQ ||
        p_request->bRequest != AUDIO10_CS_REQ_SET_CUR ||
        p_request->wLength != sizeof(audio10_control_cur_3_t))
@@ -706,14 +630,8 @@ void tinyusb_control_task(void){
    uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
  
    if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt == 0)
-   {
        blink_interval_ms = BLINK_MOUNTED;
-       usb_out_endpoint_open = false;
-       tud_audio_n_clear_ep_out_ff(0);
-   }
 
-   if (ITF_NUM_AUDIO_STREAMING_MIC == itf && alt == 0)
-       is_usb_mic_running = false;
  
    return true;
  }
@@ -726,16 +644,8 @@ void tinyusb_control_task(void){
  
    TU_LOG2("Set interface %d alt %d\r\n", itf, alt);
    if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt != 0)
-   {
        blink_interval_ms = BLINK_STREAMING;
-       usb_out_endpoint_open = true;
-       tud_audio_n_clear_ep_out_ff(0);
-       current_resolution = USB_AUDIO_RESOLUTION_BITS;
-       printf("USB speaker OUT endpoint opened: itf=%u alt=%u\n", itf, alt);
-   }
 
-   if (ITF_NUM_AUDIO_STREAMING_MIC == itf)
-       is_usb_mic_running = alt != 0;
  
    // Clear buffer when streaming format is changed
    spk_data_size = 0;
@@ -747,6 +657,41 @@ void tinyusb_control_task(void){
    return true;
  }
 
+ uint16_t usb_stop_delay = 0;
+ bool is_usb_audio_running = false;
+
+static void usb_audio_accept_out_bytes(uint16_t bytes_read)
+{
+  if (bytes_read < 4) return;
+
+  uint16_t aligned_bytes = bytes_read & (uint16_t)~0x03u;
+  if (!aligned_bytes) return;
+
+  usb_stop_delay = 0;
+  is_usb_audio_running = true;
+  set_usb_streaming(true);
+
+  if (current_resolution == 0) current_resolution = USB_AUDIO_RESOLUTION_BITS;
+
+  if (current_resolution == USB_AUDIO_RESOLUTION_BITS)
+  {
+    int16_t *src = (int16_t *)spk_buf;
+    uint16_t sample_count = aligned_bytes / 4;
+    audio_slot_push_samples(src, sample_count);
+  }
+}
+
+static void usb_audio_drain_out_task(void)
+{
+  // Extra TinyUSB OUT drain path. Keeps the original pre-read callback,
+  // but also pulls pending bytes from the OUT FIFO in the normal task loop.
+  for (uint8_t i = 0; i < 4; i++)
+  {
+    uint16_t got = tud_audio_read(spk_buf, sizeof(spk_buf));
+    if (got == 0) break;
+    usb_audio_accept_out_bytes(got);
+  }
+}
 
  bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting)
  {
@@ -755,19 +700,12 @@ void tinyusb_control_task(void){
    (void)ep_out;
    (void)cur_alt_setting;
 
-   usb_rx_isr_seen = true;
-
-   // Older TinyUSB/Pico SDK trees call this pre-read hook. Read exactly what
-   // arrived and push it to the A2DP queue. If this hook is not used, audio_task()
-   // below still drains the FIFO through tud_audio_n_available/read.
    uint16_t to_read = n_bytes_received;
-   if (to_read > sizeof(spk_buf))
-   {
-     to_read = sizeof(spk_buf);
-   }
+   if (to_read > sizeof(spk_buf)) to_read = sizeof(spk_buf);
 
-   uint16_t got = tud_audio_n_read(0, spk_buf, to_read);
-   usb_audio_accept_out_bytes(got);
+   spk_data_size = tud_audio_read(spk_buf, to_read);
+   usb_audio_accept_out_bytes((uint16_t)spk_data_size);
+   spk_data_size = 0;
 
    return true;
  }
@@ -779,31 +717,25 @@ void tinyusb_control_task(void){
    (void)func_id;
    (void)ep_out;
    (void)cur_alt_setting;
-   usb_rx_isr_seen = true;
    return true;
  }
 
  static void queue_mic_silence(void)
  {
-   if (is_usb_mic_running)
-   {
-     tud_audio_write(mic_silence, sizeof(mic_silence));
-   }
+   // Speaker-only build: no USB microphone endpoint.
  }
  
+
+#if CFG_TUD_AUDIO_ENABLE_EP_IN
  bool tud_audio_tx_done_pre_load_cb(uint8_t rhport, uint8_t itf, uint8_t ep_in, uint8_t cur_alt_setting)
  {
    (void)rhport;
+   (void)itf;
    (void)ep_in;
    (void)cur_alt_setting;
-
-   if (itf == ITF_NUM_AUDIO_STREAMING_MIC)
-   {
-     queue_mic_silence();
-   }
-
    return true;
  }
+#endif
  
  //--------------------------------------------------------------------+
  // AUDIO Task
@@ -812,7 +744,7 @@ void tinyusb_control_task(void){
 
  void audio_task(void)
  {
-  usb_audio_drain_out_fifo();
+  usb_audio_drain_out_task();
   queue_mic_silence();
 
   if (is_usb_audio_running){
