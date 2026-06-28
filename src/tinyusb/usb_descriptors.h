@@ -18,11 +18,7 @@
 #define USB_AUDIO_MIC_CHANNELS               1
 #define USB_AUDIO_BYTES_PER_SAMPLE           2
 #define USB_AUDIO_RESOLUTION_BITS            16
-// Nominal 48 kHz stereo 16-bit audio is 192 bytes per 1 ms frame.
-// Full-speed isochronous sinks should allow +1 stereo frame for clock drift,
-// matching the known-good UAC2 project: max packet = 196 bytes.
-#define USB_AUDIO_SPK_PACKET_BYTES_NOMINAL   192
-#define USB_AUDIO_SPK_PACKET_BYTES           196
+#define USB_AUDIO_SPK_PACKET_BYTES           192
 #define USB_AUDIO_MIC_PACKET_BYTES           96
 
 #define USB_HID_REPORT_DESC_LEN              62

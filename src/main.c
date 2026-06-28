@@ -155,6 +155,12 @@ void check_bootsel_state(void)
 }
 
 
+bool usb_timer_callback(repeating_timer_t *rt){
+    (void)rt;
+    tinyusb_task();
+    return true;
+}
+
 bool bootsel_timer_callback(repeating_timer_t *rt) {
     (void)rt;
     check_bootsel_state();
@@ -188,6 +194,8 @@ int main() {
         currect_slot = read_uint8_last_flash();
     }
 
+    tinyusb_main();
+
     audio_slot_queue_init();
 
     printf("init ctw43.\n");
@@ -207,7 +215,8 @@ int main() {
     // Keep encoding on Core 0 for now
     // multicore_launch_core1_with_stack(core1_aaceld_encoder_loop, core1_stack, sizeof(core1_stack));
 
-    tinyusb_main();
+    static repeating_timer_t usb_timer;
+    add_repeating_timer_us(-500, usb_timer_callback, NULL, &usb_timer);
 
     static repeating_timer_t bootsel_timer;
     add_repeating_timer_us(20000, bootsel_timer_callback, NULL, &bootsel_timer);
@@ -217,9 +226,8 @@ int main() {
 
     while (1) {
         watchdog_update();  // feed the watchdog
-        tinyusb_task();
         tinyusb_control_task();
-        sleep_ms(1);
+        sleep_ms(50);
     }
 
 }

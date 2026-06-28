@@ -227,13 +227,9 @@ static int aac_bit_rate = 192000;
 
 
 static const uint8_t media_sbc_codec_capabilities[] = {
-    // USB input from PS5 is fixed at 48 kHz. Do not advertise 44.1/32/16 kHz
-    // or the A2DP side can negotiate a clock that does not match the USB PCM.
-    // Match the style used by the original code comments: frequency constant in high nibble.
-    // Use Stereo only to avoid mono/dual-channel negotiation.
-    (AVDTP_SBC_48000 << 4) | AVDTP_SBC_STEREO,
-    0xFF,// keep block length/subbands/allocation compatible with most sinks
-    2, 45
+    0xFF,//(AVDTP_SBC_44100 << 4) | AVDTP_SBC_STEREO,
+    0xFF,//(AVDTP_SBC_BLOCK_LENGTH_16 << 4) | (AVDTP_SBC_SUBBANDS_8 << 2) | AVDTP_SBC_ALLOCATION_METHOD_LOUDNESS,
+    2, 53
 };
 
 
@@ -1477,7 +1473,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             }
             dump_sbc_configuration(sbc_configuration);
 
-            configure_sample_rate(sbc_configuration.sampling_frequency);
+            configure_sample_rate(sc.sampling_frequency);
             btstack_sbc_encoder_init(&sbc_encoder_state, SBC_MODE_STANDARD, 
                 sbc_configuration.block_length, sbc_configuration.subbands, 
                 sbc_configuration.allocation_method, sbc_configuration.sampling_frequency, 
@@ -2110,10 +2106,6 @@ static int setup_sbc_configuration(){
     // choose SBC config params
     avdtp_configuration_sbc_t configuration;
     configuration.sampling_frequency = avdtp_choose_sbc_sampling_frequency(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_sampling_frequency_bitmap(packet));
-    // Keep the selected A2DP clock explicit. The USB side is fixed at 48 kHz,
-    // so the local SBC endpoint only advertises 48 kHz above; this assignment
-    // prevents the timer from staying on a stale/default value.
-    sc.sampling_frequency = configuration.sampling_frequency;
     configuration.channel_mode       = avdtp_choose_sbc_channel_mode(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_channel_mode_bitmap(packet));
     configuration.block_length       = avdtp_choose_sbc_block_length(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_block_length_bitmap(packet));
     configuration.subbands           = avdtp_choose_sbc_subbands(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_subbands_bitmap(packet));

@@ -1,0 +1,22 @@
+UAC1 TIMERFIX AUDIO PIPELINE
+
+Base: UAC1 CLEAN NO-UAC2-LEFTOVERS.
+
+Fix principal desta versão:
+- Restaura o modelo do projeto UAC2 funcional: tinyusb_task() em repeating_timer a cada 500 us.
+- Remove tinyusb_task() do loop principal com sleep_ms(1).
+- Mantém tinyusb_control_task() no loop principal com sleep_ms(50), como no projeto funcional.
+
+Motivo:
+- Endpoint isocronous de áudio precisa ser atendido com latência baixa e estável.
+- Rodar TinyUSB somente no loop principal pode atrasar a leitura dos pacotes USB quando o BTstack/controle consome tempo.
+- Esse atraso causa perda/fragmentação de frames PCM antes do encoder, resultando em picote e distorção.
+
+Outros pontos mantidos seguros:
+- UAC1 puro, sem request de clock UAC2.
+- PCM 48 kHz, estéreo, 16-bit.
+- Pacote OUT nominal/maximo: 192 bytes.
+- Buffer OUT: 2 pacotes, igual ao projeto UAC2 funcional.
+- btstack_avdtp_source.c restaurado do projeto UAC2 funcional.
+- Sem bitpool/SBC forçado.
+- Sem volume Bluetooth forçado no máximo.
