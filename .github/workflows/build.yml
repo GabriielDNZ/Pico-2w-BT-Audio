@@ -1,4 +1,4 @@
-name: Build Pico UF2 - Toolchain 14.2
+name: Build Pico UF2 - Toolchain 14.2 fixed
 
 on:
   workflow_dispatch:
@@ -13,6 +13,7 @@ jobs:
     env:
       PICO_SDK_PATH: ${{ github.workspace }}/pico-sdk
       ARM_TOOLCHAIN_URL: https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi.tar.xz
+      ARM_TOOLCHAIN_DIR: ${{ runner.temp }}/arm-gnu
 
     steps:
       - name: Checkout firmware
@@ -33,17 +34,18 @@ jobs:
 
       - name: Install Arm GNU Toolchain 14.2.Rel1
         run: |
-          mkdir -p "$RUNNER_TEMP/arm-gnu"
+          mkdir -p "$ARM_TOOLCHAIN_DIR"
           wget -O "$RUNNER_TEMP/arm-gnu.tar.xz" "$ARM_TOOLCHAIN_URL"
-          tar -xf "$RUNNER_TEMP/arm-gnu.tar.xz" -C "$RUNNER_TEMP/arm-gnu" --strip-components=1
-          echo "$RUNNER_TEMP/arm-gnu/bin" >> "$GITHUB_PATH"
+          tar -xf "$RUNNER_TEMP/arm-gnu.tar.xz" -C "$ARM_TOOLCHAIN_DIR" --strip-components=1
+          test -x "$ARM_TOOLCHAIN_DIR/bin/arm-none-eabi-gcc"
+          echo "$ARM_TOOLCHAIN_DIR/bin" >> "$GITHUB_PATH"
 
       - name: Show tool versions
         run: |
           cmake --version
           ninja --version
-          arm-none-eabi-gcc --version
-          arm-none-eabi-g++ --version
+          "$ARM_TOOLCHAIN_DIR/bin/arm-none-eabi-gcc" --version
+          "$ARM_TOOLCHAIN_DIR/bin/arm-none-eabi-g++" --version
 
       - name: Fetch Pico SDK 2.1.1
         run: |
@@ -56,9 +58,10 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DPICO_BOARD=pico2_w \
             -DPICO_SDK_PATH="$PICO_SDK_PATH" \
-            -DCMAKE_C_COMPILER=arm-none-eabi-gcc \
-            -DCMAKE_CXX_COMPILER=arm-none-eabi-g++ \
-            -DCMAKE_ASM_COMPILER=arm-none-eabi-gcc \
+            -DPICO_TOOLCHAIN_PATH="$ARM_TOOLCHAIN_DIR" \
+            -DCMAKE_C_COMPILER="$ARM_TOOLCHAIN_DIR/bin/arm-none-eabi-gcc" \
+            -DCMAKE_CXX_COMPILER="$ARM_TOOLCHAIN_DIR/bin/arm-none-eabi-g++" \
+            -DCMAKE_ASM_COMPILER="$ARM_TOOLCHAIN_DIR/bin/arm-none-eabi-gcc" \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
       - name: Build
@@ -72,7 +75,7 @@ jobs:
       - name: Upload UF2 artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PicoW_USB_BT_Audio-UAC2-toolchain14-v15
+          name: PicoW_USB_BT_Audio-UAC2-toolchain14-v15b
           path: |
             build/*.uf2
             build/*.bin
