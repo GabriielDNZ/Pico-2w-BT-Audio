@@ -45,7 +45,7 @@ tusb_desc_device_t const desc_device =
 {
     .bLength            = sizeof(tusb_desc_device_t),
     .bDescriptorType    = TUSB_DESC_DEVICE,
-    .bcdUSB             = USB_AUDIO_PNP_BCD_USB,
+    .bcdUSB             = 0x0200,
 
     // Use Interface Association Descriptor (IAD) for Audio
     // As required by USB Specs IAD's subclass must be common class (2) and protocol must be IAD (1)
@@ -54,13 +54,13 @@ tusb_desc_device_t const desc_device =
     .bDeviceProtocol    = MISC_PROTOCOL_IAD,
     .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
 
-    .idVendor           = USB_AUDIO_PNP_VID,
-    .idProduct          = USB_AUDIO_PNP_PID,
-    .bcdDevice          = USB_AUDIO_PNP_BCD_DEVICE,
+    .idVendor           = 0xCafe,
+    .idProduct          = USB_PID,
+    .bcdDevice          = 0x0100,
 
     .iManufacturer      = 0x01,
     .iProduct           = 0x02,
-    .iSerialNumber      = 0x00,
+    .iSerialNumber      = 0x03,
 
     .bNumConfigurations = 0x01
 };
@@ -145,11 +145,11 @@ enum {
 char const *string_desc_arr[] =
 {
   (const char[]) { 0x09, 0x04 },  // 0: is supported language is English (0x0409)
-  "C-Media Electronics Inc.",       // 1: Manufacturer
-  "USB PnP Audio Device",         // 2: Product
+  "TinyUSB",                      // 1: Manufacturer
+  "TinyUSB BT",              // 2: Product
   NULL,                           // 3: Serials will use unique ID if possible
-  "USB PnP Audio Device",        // 4: Audio Interface
-  "USB PnP Audio Device",        // 5: Audio Interface
+  "TinyUSB BT",             // 4: Audio Interface
+  "TinyUSB BT",                 // 5: Audio Interface
 };
 
 

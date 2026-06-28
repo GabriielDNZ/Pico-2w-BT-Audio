@@ -25,13 +25,6 @@
 
  #ifndef _USB_DESCRIPTORS_H_
  #define _USB_DESCRIPTORS_H_
-
-// PS5-friendly USB identity. The audio descriptors remain UAC2/original.
-// This only changes the device identity to look like a common USB PnP audio adapter.
-#define USB_AUDIO_PNP_VID                    0x0C76
-#define USB_AUDIO_PNP_PID                    0x161F
-#define USB_AUDIO_PNP_BCD_USB                0x0200
-#define USB_AUDIO_PNP_BCD_DEVICE             0x0100
  
  // #include "tusb.h"
  

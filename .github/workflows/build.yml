@@ -22,13 +22,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            gcc-arm-none-eabi \
-            libnewlib-arm-none-eabi \
-            ninja-build \
-            python3
+          sudo apt-get install -y             build-essential             cmake             gcc-arm-none-eabi             libnewlib-arm-none-eabi             ninja-build             python3
 
       - name: Show tool versions
         run: |
@@ -37,7 +31,7 @@ jobs:
           arm-none-eabi-gcc --version
           arm-none-eabi-g++ --version
 
-      - name: Fetch Pico SDK
+      - name: Fetch Pico SDK 2.1.1 exactly like working UF2
         run: |
           git clone --branch 2.1.1 --depth 1 https://github.com/raspberrypi/pico-sdk.git "$PICO_SDK_PATH"
           git -C "$PICO_SDK_PATH" submodule update --init --recursive
@@ -55,7 +49,7 @@ jobs:
       - name: Upload build outputs
         uses: actions/upload-artifact@v4
         with:
-          name: PicoW_USB_BT_Audio-UAC2-ps5-pnp-iadfix-v13b
+          name: PicoW_USB_BT_Audio-UAC2-original-mainfix-memory-v14
           path: |
             build/*.uf2
             build/*.bin
