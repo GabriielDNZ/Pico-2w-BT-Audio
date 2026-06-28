@@ -1,0 +1,12 @@
+SBC50 FROM 60 CLEANBASE
+
+Base: SBC60 FROM 70 CLEANBASE, which was confirmed clean.
+
+Changed only:
+- BT_KEEPALIVE_SILENCE_IDLE_MS: 60 -> 50
+- AUDIO_SLOT_COUNT_SBC: 10 -> 9
+
+Kept unchanged:
+- Real SBC audio_timer_interval = 5
+- SBC_LOW_DELAY_FRAMES_PER_PACKET = 4
+- AAC/AAC-ELD/LDAC unchanged
