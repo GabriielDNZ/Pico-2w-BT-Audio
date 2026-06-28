@@ -9,11 +9,11 @@
 #include <stdbool.h>
 
 // Slot queue constants
-#define AUDIO_SLOT_COUNT_SBC   48   // SBC: 128 samples/slot, 48*2.67ms = 128ms anti-picote buffer
+#define AUDIO_SLOT_COUNT_SBC   24   // SBC: 128 samples/slot, 24*2.67ms = 64ms buffer
 #define AUDIO_SLOT_COUNT_AAC   16   // AAC-LC: 1024 samples/slot, 16*21.3ms = 341ms buffer
 #define AUDIO_SLOT_COUNT_ELD   6    // AAC-ELD: 480 samples/slot, 6*10ms = 60ms buffer
 #define AUDIO_SLOT_COUNT_LDAC  16   // LDAC: 256 samples/slot, 16*5.3ms = 85ms buffer
-#define AUDIO_SLOT_COUNT_MAX   48   // pool size = max of all above
+#define AUDIO_SLOT_COUNT_MAX   24   // pool size = max of all above
 #define AUDIO_SLOT_MAX_SAMPLES 1024
 #define AUDIO_SLOT_MAX_INT16   (AUDIO_SLOT_MAX_SAMPLES * 2)  // stereo
 
