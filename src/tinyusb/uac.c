@@ -48,6 +48,7 @@
 
 #define USB_AUDIO_RX_TEST_TONE 0
 #define USB_AUDIO_FORCE_BT_VOLUME_MAX 0
+#define USB_AUDIO_SPK_BYTES_PER_STEREO_FRAME ((USB_AUDIO_RESOLUTION_BITS / 8) * USB_AUDIO_SPK_CHANNELS)
 
 #define UAC_REQ_ENTITY_ID(_request)  ((uint8_t)((tu_le16toh((_request)->wIndex) >> 8) & 0xff))
 #define UAC_REQ_ENDPOINT(_request)   ((uint8_t)(tu_le16toh((_request)->wIndex) & 0xff))
@@ -691,24 +692,9 @@ void tinyusb_control_task(void){
      return false;
    }
 
-   // UAC1 adaptive/synchronous hosts may provide 192-byte nominal packets
-   // and occasional 188/196-byte packets for clock correction.  Always read
-   // only complete stereo 16-bit frames, and do not drain a huge FIFO burst
-   // in one call or the BT encoder can starve/picotar.
-   if (bytes_to_read > USB_AUDIO_SPK_PACKET_BYTES)
-   {
-     bytes_to_read = USB_AUDIO_SPK_PACKET_BYTES;
-   }
-
-   bytes_to_read &= (uint16_t)~0x03u;
-   if (bytes_to_read == 0)
-   {
-     return false;
-   }
-
    if (bytes_to_read > sizeof(spk_buf))
    {
-     bytes_to_read = sizeof(spk_buf) & (uint16_t)~0x03u;
+     bytes_to_read = sizeof(spk_buf);
    }
 
    spk_data_size = tud_audio_read(spk_buf, bytes_to_read);
@@ -721,20 +707,22 @@ void tinyusb_control_task(void){
    is_usb_audio_running = true;
    set_usb_streaming(true);
 
-   if (current_resolution == 0)
-   {
-     current_resolution = USB_AUDIO_RESOLUTION_BITS;
-   }
+   // UAC1 advertises exactly one speaker format here: 48 kHz, stereo, 16-bit PCM.
+   // Keep the runtime resolution locked to that format because some UAC1 hosts
+   // start streaming before TinyUSB reports the format callback.
+   current_resolution = USB_AUDIO_RESOLUTION_BITS;
 
-   if (current_resolution == USB_AUDIO_RESOLUTION_BITS && (spk_data_size % 4) == 0)
+   if ((spk_data_size % USB_AUDIO_SPK_BYTES_PER_STEREO_FRAME) == 0)
    {
      int16_t *src = (int16_t *)spk_buf;
-     uint16_t sample_count = spk_data_size / 4;
+     // audio_slot_push_samples() expects stereo frames/pairs, not raw int16 values.
+     // For 16-bit stereo this is bytes / 4: L16 + R16.
+     uint16_t stereo_pair_count = spk_data_size / USB_AUDIO_SPK_BYTES_PER_STEREO_FRAME;
 
 #if USB_AUDIO_RX_TEST_TONE
-     fill_usb_rx_test_tone(src, sample_count);
+     fill_usb_rx_test_tone(src, stereo_pair_count);
 #endif
-     audio_slot_push_samples(src, sample_count);
+     audio_slot_push_samples(src, stereo_pair_count);
    }
 
    spk_data_size = 0;
@@ -749,11 +737,6 @@ void tinyusb_control_task(void){
      if (available == 0)
      {
        break;
-     }
-
-     if (available > USB_AUDIO_SPK_PACKET_BYTES)
-     {
-       available = USB_AUDIO_SPK_PACKET_BYTES;
      }
 
      if (!push_usb_speaker_bytes(available))

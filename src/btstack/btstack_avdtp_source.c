@@ -227,12 +227,9 @@ static int aac_bit_rate = 192000;
 
 
 static const uint8_t media_sbc_codec_capabilities[] = {
-    // Keep SBC negotiation compatible with more headphones/sinks.
-    // Do NOT lock to Joint Stereo/48 kHz here: some sinks reject that and audio goes silent.
-    // Only reduce max bitpool a little to ease Pico 2W BT bandwidth.
-    0xFF,
-    0xFF,
-    2, 45
+    0xFF,//(AVDTP_SBC_44100 << 4) | AVDTP_SBC_STEREO,
+    0xFF,//(AVDTP_SBC_BLOCK_LENGTH_16 << 4) | (AVDTP_SBC_SUBBANDS_8 << 2) | AVDTP_SBC_ALLOCATION_METHOD_LOUDNESS,
+    2, 53
 };
 
 
@@ -469,30 +466,6 @@ static bool have_ldac_codec_capabilities = false;
 static bool have_aaceld_codec_capabilities = false;
 bd_addr_t cur_active_device;
 
-// Diagnostic build: if the Bluetooth stream is alive but no USB speaker
-// packets reach the queue, generate a low test tone instead of silence.
-#define USB_AUDIO_IDLE_TEST_TONE 0
-
-static void audio_slot_fill_idle_audio(int16_t *dst, uint16_t int16_count) {
-#if USB_AUDIO_IDLE_TEST_TONE
-    static uint16_t phase = 0;
-    uint16_t frames = int16_count / 2;
-
-    for (uint16_t i = 0; i < frames; i++) {
-        int16_t sample = (phase < 24) ? 3000 : -3000;
-        dst[(i * 2) + 0] = sample;
-        dst[(i * 2) + 1] = sample;
-
-        phase++;
-        if (phase >= 48) {
-            phase = 0;
-        }
-    }
-#else
-    memset(dst, 0, int16_count * sizeof(int16_t));
-#endif
-}
-
 // --- AAC-ELD Core 1 encoder infrastructure ---
 #define ENCODED_FRAME_MAX_SIZE 500
 #define ENCODED_FRAME_QUEUE_DEPTH 8
@@ -606,7 +579,7 @@ static bool audio_slot_pop(uint8_t *slot_idx) {
     }
     // No data ready — produce silence
     if (queue_try_remove(&free_queue, slot_idx)) {
-        audio_slot_fill_idle_audio(slot_pool[*slot_idx].data, slot_frame_int16);
+        memset(slot_pool[*slot_idx].data, 0, slot_frame_int16 * sizeof(int16_t));
         return true;
     }
     return false;
@@ -2414,11 +2387,8 @@ void avdtp_source_establish_stream(){
 
 
 int set_next_codec(uint8_t num){
-    // Force the mandatory A2DP SBC path while debugging PS5/UAC1 audio.
-    // This avoids LDAC/AAC/AAC-ELD negotiation differences between headsets.
-    (void)num;
-    return setup_sbc_configuration();
-
+    //return 0;
+    //return setup_sbc_configuration();
     switch (num){
         case 0: // AAC-ELD > LDAC > AAC > SBC
             if (have_aaceld_codec_capabilities){
@@ -2534,8 +2504,11 @@ static void avrcp_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t 
             
             printf("Enable Volume Change notification\n");
             avrcp_controller_enable_notification(media_tracker.avrcp_cid, AVRCP_NOTIFICATION_EVENT_VOLUME_CHANGED);
-            media_tracker.volume = 127;
-            avrcp_controller_set_absolute_volume(media_tracker.avrcp_cid, media_tracker.volume);
+            // Set initial volume to 50% on first connection
+            if (media_tracker.volume == 0 || media_tracker.volume == 127) {
+                media_tracker.volume = 64;  // ~50% (0-127 range)
+                avrcp_controller_set_absolute_volume(media_tracker.avrcp_cid, media_tracker.volume);
+            }
             printf("Enable Battery Status Change notification\n");
             avrcp_controller_enable_notification(media_tracker.avrcp_cid, AVRCP_NOTIFICATION_EVENT_BATT_STATUS_CHANGED);
             return;
