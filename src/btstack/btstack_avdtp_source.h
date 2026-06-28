@@ -31,9 +31,6 @@ uint8_t get_bt_volume();
 bool get_bt_mute();
 
 void set_usb_streaming(bool flag);
-void set_usb_endpoint_open(bool flag);
-void set_usb_rx_seen(bool flag);
-void set_usb_diag_state(uint8_t state);
 
 bool * get_is_bt_sink_volume_changed_ptr();
 

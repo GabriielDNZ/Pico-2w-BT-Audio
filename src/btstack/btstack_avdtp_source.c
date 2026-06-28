@@ -461,60 +461,10 @@ static uint16_t filling_offset    = 0;
 static bool     filling_slot_valid = false;
 static uint16_t slot_frame_int16  = AUDIO_SLOT_MAX_INT16; // set per codec
 
-static volatile bool is_usb_streaming = false;
-static volatile bool is_usb_endpoint_open = false;
-static volatile bool is_usb_rx_seen = false;
-// 0 = host has not selected speaker alt=1 / endpoint closed
-// 1 = speaker alt=1 selected, waiting for USB OUT packets
-// 2 = USB OUT packets have been seen
-static volatile uint8_t usb_audio_diag_state = 0;
+static bool is_usb_streaming = false;
 static bool have_ldac_codec_capabilities = false;
 static bool have_aaceld_codec_capabilities = false;
 bd_addr_t cur_active_device;
-
-// Diagnostic build: if the Bluetooth stream is alive but no USB speaker
-// packets reach the queue, generate a low test tone instead of silence.
-#define USB_AUDIO_IDLE_TEST_TONE 1
-
-static void audio_slot_fill_idle_audio(int16_t *dst, uint16_t int16_count) {
-#if USB_AUDIO_IDLE_TEST_TONE
-    static uint32_t phase = 0;
-    uint16_t frames = int16_count / 2;
-
-    uint8_t state = usb_audio_diag_state;
-
-    for (uint16_t i = 0; i < frames; i++) {
-        int16_t sample = 0;
-
-        if (state == 0) {
-            // Continuous higher tone: host has not opened speaker alt=1 / OUT EP.
-            sample = ((phase % 48) < 24) ? 3000 : -3000;
-        } else if (state == 1) {
-            // Slow pulsing lower tone: OUT EP opened, but no USB audio bytes arrived yet.
-            uint32_t p = phase % 24000; // about 0.5 s at 48 kHz
-            if (p < 12000) {
-                sample = ((phase % 96) < 48) ? 2400 : -2400;
-            } else {
-                sample = 0;
-            }
-        } else {
-            // Very short chirp: USB packets were seen but the queue is currently empty.
-            uint32_t p = phase % 48000; // once per second
-            if (p < 2400) {
-                sample = ((phase % 96) < 48) ? 1800 : -1800;
-            } else {
-                sample = 0;
-            }
-        }
-
-        dst[(i * 2) + 0] = sample;
-        dst[(i * 2) + 1] = sample;
-        phase++;
-    }
-#else
-    memset(dst, 0, int16_count * sizeof(int16_t));
-#endif
-}
 
 // --- AAC-ELD Core 1 encoder infrastructure ---
 #define ENCODED_FRAME_MAX_SIZE 500
@@ -629,7 +579,7 @@ static bool audio_slot_pop(uint8_t *slot_idx) {
     }
     // No data ready — produce silence
     if (queue_try_remove(&free_queue, slot_idx)) {
-        audio_slot_fill_idle_audio(slot_pool[*slot_idx].data, slot_frame_int16);
+        memset(slot_pool[*slot_idx].data, 0, slot_frame_int16 * sizeof(int16_t));
         return true;
     }
     return false;
@@ -750,25 +700,6 @@ bool check_is_streaming(){
 
 void set_usb_streaming(bool flag){
     is_usb_streaming = flag;
-}
-
-void set_usb_endpoint_open(bool flag){
-    is_usb_endpoint_open = flag;
-    if (flag){
-        if (usb_audio_diag_state == 0) usb_audio_diag_state = 1;
-    } else {
-        usb_audio_diag_state = 0;
-        is_usb_rx_seen = false;
-    }
-}
-
-void set_usb_rx_seen(bool flag){
-    is_usb_rx_seen = flag;
-    if (flag) usb_audio_diag_state = 2;
-}
-
-void set_usb_diag_state(uint8_t state){
-    usb_audio_diag_state = state;
 }
 
 bool get_allow_switch_slot(){
@@ -2456,11 +2387,8 @@ void avdtp_source_establish_stream(){
 
 
 int set_next_codec(uint8_t num){
-    // Force the mandatory A2DP SBC path while debugging PS5/UAC1 audio.
-    // This avoids LDAC/AAC/AAC-ELD negotiation differences between headsets.
-    (void)num;
-    return setup_sbc_configuration();
-
+    //return 0;
+    //return setup_sbc_configuration();
     switch (num){
         case 0: // AAC-ELD > LDAC > AAC > SBC
             if (have_aaceld_codec_capabilities){
@@ -2576,8 +2504,11 @@ static void avrcp_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t 
             
             printf("Enable Volume Change notification\n");
             avrcp_controller_enable_notification(media_tracker.avrcp_cid, AVRCP_NOTIFICATION_EVENT_VOLUME_CHANGED);
-            media_tracker.volume = 127;
-            avrcp_controller_set_absolute_volume(media_tracker.avrcp_cid, media_tracker.volume);
+            // Set initial volume to 50% on first connection
+            if (media_tracker.volume == 0 || media_tracker.volume == 127) {
+                media_tracker.volume = 64;  // ~50% (0-127 range)
+                avrcp_controller_set_absolute_volume(media_tracker.avrcp_cid, media_tracker.volume);
+            }
             printf("Enable Battery Status Change notification\n");
             avrcp_controller_enable_notification(media_tracker.avrcp_cid, AVRCP_NOTIFICATION_EVENT_BATT_STATUS_CHANGED);
             return;

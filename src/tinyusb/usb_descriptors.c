@@ -1,14 +1,45 @@
 /*
- * USB descriptors for the UAC1 headset build.
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2020 Ha Thach (tinyusb.org)
+ * Copyright (c) 2020 Jerzy Kasenberg
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
  */
 
-#include <string.h>
-
+#include "bsp/board_api.h"
 #include "tusb.h"
 #include "usb_descriptors.h"
 
+/* A combination of interfaces must have a unique product id, since PC will save device driver after the first plug.
+ * Same VID/PID with different interface e.g MSC (first), then CDC (later) will possibly cause system error on PC.
+ *
+ * Auto ProductID layout's Bitmap:
+ *   [MSB]     AUDIO | MIDI | HID | MSC | CDC          [LSB]
+ */
+#define _PID_MAP(itf, n)  ( (CFG_TUD_##itf) << (n) )
+#define USB_PID           (0x4000 | _PID_MAP(CDC, 0) | _PID_MAP(MSC, 1) | _PID_MAP(HID, 2) | \
+    _PID_MAP(MIDI, 3) | _PID_MAP(AUDIO, 4) | _PID_MAP(VENDOR, 5) )
+
 //--------------------------------------------------------------------+
-// Device Descriptor
+// Device Descriptors
 //--------------------------------------------------------------------+
 tusb_desc_device_t const desc_device =
 {
@@ -16,6 +47,8 @@ tusb_desc_device_t const desc_device =
     .bDescriptorType    = TUSB_DESC_DEVICE,
     .bcdUSB             = USB_AUDIO_PNP_BCD_USB,
 
+    // Use Interface Association Descriptor (IAD) for Audio
+    // As required by USB Specs IAD's subclass must be common class (2) and protocol must be IAD (1)
     .bDeviceClass       = 0x00,
     .bDeviceSubClass    = 0x00,
     .bDeviceProtocol    = 0x00,
@@ -32,6 +65,8 @@ tusb_desc_device_t const desc_device =
     .bNumConfigurations = 0x01
 };
 
+// Invoked when received GET DEVICE DESCRIPTOR
+// Application return pointer to descriptor
 uint8_t const * tud_descriptor_device_cb(void)
 {
   return (uint8_t const *)&desc_device;
@@ -40,115 +75,124 @@ uint8_t const * tud_descriptor_device_cb(void)
 //--------------------------------------------------------------------+
 // Configuration Descriptor
 //--------------------------------------------------------------------+
-#define EPNUM_AUDIO_OUT    0x01
-#define EPNUM_AUDIO_IN     0x02
+#define CONFIG_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + CFG_TUD_AUDIO * TUD_AUDIO_HEADSET_STEREO_DESC_LEN)
 
-#define AUDIO10_DESC_LEN   192
-#define CONFIG_TOTAL_LEN   (TUD_CONFIG_DESC_LEN + AUDIO10_DESC_LEN)
+#if CFG_TUSB_MCU == OPT_MCU_LPC175X_6X || CFG_TUSB_MCU == OPT_MCU_LPC177X_8X || CFG_TUSB_MCU == OPT_MCU_LPC40XX
+  // LPC 17xx and 40xx endpoint type (bulk/interrupt/iso) are fixed by its number
+  // 0 control, 1 In, 2 Bulk, 3 Iso, 4 In etc ...
+  #define EPNUM_AUDIO_IN    0x03
+  #define EPNUM_AUDIO_OUT   0x03
+  #define EPNUM_AUDIO_INT   0x01
+
+#elif CFG_TUSB_MCU == OPT_MCU_CXD56
+  // CXD56 USB driver has fixed endpoint type (bulk/interrupt/iso) and direction (IN/OUT) by its number
+  // 0 control (IN/OUT), 1 Bulk (IN), 2 Bulk (OUT), 3 In (IN), 4 Bulk (IN), 5 Bulk (OUT), 6 In (IN)
+  // #define EPNUM_AUDIO_IN    0x01
+  // #define EPNUM_AUDIO_OUT   0x02
+  // #define EPNUM_AUDIO_INT   0x03
+
+#elif CFG_TUSB_MCU == OPT_MCU_NRF5X
+  // ISO endpoints for NRF5x are fixed to 0x08 (0x88)
+  #define EPNUM_AUDIO_IN    0x08
+  #define EPNUM_AUDIO_OUT   0x08
+  #define EPNUM_AUDIO_INT   0x01
+
+#elif defined(TUD_ENDPOINT_ONE_DIRECTION_ONLY)
+  // MCUs that don't support a same endpoint number with different direction IN and OUT defined in tusb_mcu.h
+  //    e.g EP1 OUT & EP1 IN cannot exist together
+  #define EPNUM_AUDIO_IN    0x01
+  #define EPNUM_AUDIO_OUT   0x02
+  #define EPNUM_AUDIO_INT   0x03
+
+#else
+  #define EPNUM_AUDIO_IN    0x01
+  #define EPNUM_AUDIO_OUT   0x01
+  #define EPNUM_AUDIO_INT   0x02
+#endif
 
 uint8_t const desc_configuration[] =
 {
-    // Config number, interface count, string index, total length, attributes, power in mA
+    // Config number, interface count, string index, total length, attribute, power in mA
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
 
-    // UAC1 headset descriptor: speaker OUT + microphone IN.
-    0x08, 0x0B, ITF_NUM_AUDIO_CONTROL, ITF_NUM_TOTAL, 0x01, 0x01, 0x00, 0x02,
-    0x09, 0x04, ITF_NUM_AUDIO_CONTROL, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00,
-    0x0A, 0x24, 0x01, 0x00, 0x01, 0x47, 0x00, 0x02,
-      ITF_NUM_AUDIO_STREAMING_SPK, ITF_NUM_AUDIO_STREAMING_MIC,
-    0x0C, 0x24, 0x02, UAC1_ENTITY_SPK_INPUT_TERMINAL,
-      0x01, 0x01, 0x00, 0x02, 0x03, 0x00, 0x00, 0x00,
-    0x0A, 0x24, 0x06, UAC1_ENTITY_SPK_FEATURE_UNIT,
-      UAC1_ENTITY_SPK_INPUT_TERMINAL, 0x01, 0x03, 0x03, 0x03, 0x00,
-    0x09, 0x24, 0x03, UAC1_ENTITY_SPK_OUTPUT_TERMINAL,
-      0x01, 0x03, 0x00, UAC1_ENTITY_SPK_FEATURE_UNIT, 0x00,
-    0x0C, 0x24, 0x02, UAC1_ENTITY_MIC_INPUT_TERMINAL,
-      0x01, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x09, 0x24, 0x06, UAC1_ENTITY_MIC_FEATURE_UNIT,
-      UAC1_ENTITY_MIC_INPUT_TERMINAL, 0x01, 0x03, 0x03, 0x00,
-    0x09, 0x24, 0x03, UAC1_ENTITY_MIC_OUTPUT_TERMINAL,
-      0x01, 0x01, 0x00, UAC1_ENTITY_MIC_FEATURE_UNIT, 0x00,
+    // Interface number, string index, EP Out & EP In address, EP size
+    TUD_AUDIO_HEADSET_STEREO_DESCRIPTOR(2, EPNUM_AUDIO_OUT, 0x00, EPNUM_AUDIO_INT | 0x80)
 
-    // Interface 1, speaker/playback, host OUT -> Pico.
-    0x09, 0x04, ITF_NUM_AUDIO_STREAMING_SPK, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00,
-    0x09, 0x04, ITF_NUM_AUDIO_STREAMING_SPK, 0x01, 0x01, 0x01, 0x02, 0x00, 0x00,
-    0x07, 0x24, 0x01, UAC1_ENTITY_SPK_INPUT_TERMINAL, 0x01, 0x01, 0x00,
-    0x0B, 0x24, 0x02, 0x01, USB_AUDIO_SPK_CHANNELS,
-      USB_AUDIO_BYTES_PER_SAMPLE, USB_AUDIO_RESOLUTION_BITS, 0x01, 0x80, 0xBB, 0x00,
-    0x09, 0x05, EPNUM_AUDIO_OUT, 0x09,
-      USB_AUDIO_SPK_PACKET_BYTES & 0xff, USB_AUDIO_SPK_PACKET_BYTES >> 8, 0x01, 0x00, 0x00,
-    0x07, 0x25, 0x01, 0x01, 0x01, 0x01, 0x00,
+  };
 
-    // Interface 2, microphone, Pico IN -> host. The firmware sends silence.
-    0x09, 0x04, ITF_NUM_AUDIO_STREAMING_MIC, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00,
-    0x09, 0x04, ITF_NUM_AUDIO_STREAMING_MIC, 0x01, 0x01, 0x01, 0x02, 0x00, 0x00,
-    0x07, 0x24, 0x01, UAC1_ENTITY_MIC_OUTPUT_TERMINAL, 0x01, 0x01, 0x00,
-    0x0B, 0x24, 0x02, 0x01, USB_AUDIO_MIC_CHANNELS,
-      USB_AUDIO_BYTES_PER_SAMPLE, USB_AUDIO_RESOLUTION_BITS, 0x01, 0x80, 0xBB, 0x00,
-    0x09, 0x05, 0x80 | EPNUM_AUDIO_IN, 0x05,
-      USB_AUDIO_MIC_PACKET_BYTES & 0xff, USB_AUDIO_MIC_PACKET_BYTES >> 8, 0x01, 0x00, 0x00,
-    0x07, 0x25, 0x01, 0x01, 0x00, 0x00, 0x00
-};
-
-TU_VERIFY_STATIC(sizeof(desc_configuration) == CONFIG_TOTAL_LEN,
-                 "USB configuration descriptor length mismatch");
-
+// Invoked when received GET CONFIGURATION DESCRIPTOR
+// Application return pointer to descriptor
+// Descriptor contents must exist long enough for transfer to complete
 uint8_t const * tud_descriptor_configuration_cb(uint8_t index)
 {
-  (void)index;
+  (void)index; // for multiple configurations
   return desc_configuration;
 }
 
 //--------------------------------------------------------------------+
 // String Descriptors
 //--------------------------------------------------------------------+
-enum
-{
+
+// String Descriptor Index
+enum {
   STRID_LANGID = 0,
   STRID_MANUFACTURER,
   STRID_PRODUCT,
+  STRID_SERIAL,
 };
 
+// array of pointer to string descriptors
 char const *string_desc_arr[] =
 {
-  (const char[]) { 0x09, 0x04 },
-  "C-Media Electronics Inc.",
-  "USB PnP Audio Device",
+  (const char[]) { 0x09, 0x04 },  // 0: is supported language is English (0x0409)
+  "C-Media Electronics Inc.",       // 1: Manufacturer
+  "USB PnP Audio Device",         // 2: Product
+  NULL,                           // 3: Serials will use unique ID if possible
+  "USB PnP Audio Device",        // 4: Audio Interface
+  "USB PnP Audio Device",        // 5: Audio Interface
 };
+
 
 static uint16_t _desc_str[32 + 1];
 
-uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
-{
+// Invoked when received GET STRING DESCRIPTOR request
+// Application return pointer to descriptor, whose contents must exist long enough for transfer to complete
+uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
   (void) langid;
   size_t chr_count;
 
-  if (index == STRID_LANGID)
-  {
-    memcpy(&_desc_str[1], string_desc_arr[0], 2);
-    chr_count = 1;
+  switch ( index ) {
+    case STRID_LANGID:
+      memcpy(&_desc_str[1], string_desc_arr[0], 2);
+      chr_count = 1;
+      break;
+
+    case STRID_SERIAL:
+      chr_count = board_usb_get_serial(_desc_str + 1, 32);
+      break;
+
+    default:
+      // Note: the 0xEE index string is a Microsoft OS 1.0 Descriptors.
+      // https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/microsoft-defined-usb-descriptors
+
+      if ( !(index < sizeof(string_desc_arr) / sizeof(string_desc_arr[0])) ) return NULL;
+
+      const char *str = string_desc_arr[index];
+
+      // Cap at max char
+      chr_count = strlen(str);
+      size_t const max_count = sizeof(_desc_str) / sizeof(_desc_str[0]) - 1; // -1 for string type
+      if ( chr_count > max_count ) chr_count = max_count;
+
+      // Convert ASCII string into UTF-16
+      for ( size_t i = 0; i < chr_count; i++ ) {
+        _desc_str[1 + i] = str[i];
+      }
+      break;
   }
-  else
-  {
-    if (!(index < sizeof(string_desc_arr) / sizeof(string_desc_arr[0])))
-    {
-      return NULL;
-    }
 
-    const char *str = string_desc_arr[index];
-    chr_count = strlen(str);
-    size_t const max_count = sizeof(_desc_str) / sizeof(_desc_str[0]) - 1;
-    if (chr_count > max_count)
-    {
-      chr_count = max_count;
-    }
+  // first byte is length (including header), second byte is string type
+  _desc_str[0] = (uint16_t) ((TUSB_DESC_STRING << 8) | (2 * chr_count + 2));
 
-    for (size_t i = 0; i < chr_count; i++)
-    {
-      _desc_str[1 + i] = str[i];
-    }
-  }
-
-  _desc_str[0] = (uint16_t)((TUSB_DESC_STRING << 8) | (2 * chr_count + 2));
   return _desc_str;
 }

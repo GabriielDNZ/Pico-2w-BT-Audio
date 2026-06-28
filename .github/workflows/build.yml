@@ -55,7 +55,7 @@ jobs:
       - name: Upload build outputs
         uses: actions/upload-artifact@v4
         with:
-          name: PicoW_USB_BT_Audio-ps5-tinyusb-audio10
+          name: PicoW_USB_BT_Audio-UAC2-ps5-pnp-v12
           path: |
             build/*.uf2
             build/*.bin
