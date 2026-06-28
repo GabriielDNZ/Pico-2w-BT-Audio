@@ -84,7 +84,6 @@
 // period to keep the Bluetooth A2DP stream alive. Micro-gaps below this are not
 // filled with silence, which avoids the old picote/distorção.
 #define SBC_LOW_DELAY_FRAMES_PER_PACKET 4
-#define AAC_FRAMES_PER_PACKET 1
 #define BT_KEEPALIVE_SILENCE_IDLE_MS 30
 
 typedef struct {
@@ -884,9 +883,6 @@ static int fill_aac_audio_buffer(a2dp_media_sending_context_t *context) {
 
         audio_slot_release(slot_idx);
 
-        // AAC-LC low-delay: send AAC_FRAMES_PER_PACKET frame(s) per RTP packet.
-        if (cur_codec == 2 && context->codec_num_frames >= AAC_FRAMES_PER_PACKET) break;
-
         // AAC-ELD: max 3 frames per RTP packet
         if (cur_codec == 4 && context->codec_num_frames >= 3) break;
     }
@@ -931,10 +927,6 @@ static void avdtp_audio_timeout_handler(btstack_timer_source_t * timer){
     uint32_t max_ready = 4 * acc_num_simples;
     if (codec_type == AVDTP_CODEC_SBC) {
         max_ready = SBC_LOW_DELAY_FRAMES_PER_PACKET * btstack_sbc_encoder_num_audio_frames();
-    } else if (codec_type == AVDTP_CODEC_MPEG_2_4_AAC) {
-        // AAC-LC low-delay profile: keep only AAC_FRAMES_PER_PACKET frame(s) queued.
-        // 1024 samples / 48000 Hz = 21.3 ms. Timer is intentionally 4 ms.
-        max_ready = AAC_FRAMES_PER_PACKET * acc_num_simples;
     }
     if (context->samples_ready > max_ready) {
         context->samples_ready = max_ready;

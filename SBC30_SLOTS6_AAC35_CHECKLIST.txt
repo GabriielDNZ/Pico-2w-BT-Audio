@@ -1,0 +1,16 @@
+SBC30 SLOTS6 + AAC35 STABLE
+
+Base: SBC30 KEEP30 SLOTS6 TIMER5 FRAMES4
+
+SBC kept unchanged:
+- BT_KEEPALIVE_SILENCE_IDLE_MS = 30
+- AUDIO_SLOT_COUNT_SBC = 6
+- SBC real audio_timer_interval = 5
+- SBC_LOW_DELAY_FRAMES_PER_PACKET = 4
+
+AAC set to our stable "35" profile:
+- AUDIO_SLOT_COUNT_AAC = 2
+- aac_audio_timer_interval = 4 ms
+- AAC-LC real frame budget: 2 * 1024 / 48000 = ~42.6 ms
+- AUDIO_SLOT_COUNT_ELD = 4
+- AAC-ELD real budget: ~40 ms
