@@ -199,11 +199,8 @@ void stop_triple_blink(void){
 // #define FLASH_SECTOR_SIZE     4096
 #define FLASH_SIZE_BYTES      PICO_FLASH_SIZE_BYTES
 
-// The working UF2 uses Pico SDK/BTstack flash TLV near the end of flash.
-// Do not store the selected slot in the very last sector, otherwise unplug/replug
-// can lose Bluetooth pairing keys. Keep project storage four sectors before the end.
-#define APP_STORAGE_PAGE_BASE  (FLASH_SIZE_BYTES - (4 * FLASH_SECTOR_SIZE))
-#define TARGET_OFFSET          (APP_STORAGE_PAGE_BASE + FLASH_PAGE_SIZE - 1)
+// We’ll write to the very last byte in flash:
+#define TARGET_OFFSET         (FLASH_SIZE_BYTES - 1)
 
 // ─── RAM BUFFERS & STATE FOR CALLBACK ─────────────────────────────────────────
 static uint8_t  page_buf[FLASH_PAGE_SIZE] __attribute__((aligned(FLASH_PAGE_SIZE)));
@@ -272,9 +269,8 @@ uint8_t read_uint8_last_flash(void) {
 
 
 
-// Base of our app-storage 256-byte page. This intentionally is NOT the final
-// flash page, because the final area is used by UF2 metadata/BTstack TLV storage.
-#define LAST_PAGE_BASE        APP_STORAGE_PAGE_BASE
+// Base of the final 256-byte page in flash:
+#define LAST_PAGE_BASE        (FLASH_SIZE_BYTES - FLASH_PAGE_SIZE)
 // Base of its containing 4 KiB sector:
 #define LAST_SECTOR_BASE      (LAST_PAGE_BASE & ~(FLASH_SECTOR_SIZE - 1))
 

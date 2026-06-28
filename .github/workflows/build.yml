@@ -1,28 +1,42 @@
-name: Build Pico UF2
+name: Build Pico UF2 - Toolchain 14.2
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-      - master
+    branches: [ main, master ]
   pull_request:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     env:
       PICO_SDK_PATH: ${{ github.workspace }}/pico-sdk
+      ARM_TOOLCHAIN_URL: https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi.tar.xz
 
     steps:
       - name: Checkout firmware
         uses: actions/checkout@v4
 
-      - name: Install build tools
+      - name: Install host build tools only
         run: |
           sudo apt-get update
-          sudo apt-get install -y             build-essential             cmake             gcc-arm-none-eabi             libnewlib-arm-none-eabi             ninja-build             python3
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            python3 \
+            git \
+            wget \
+            xz-utils \
+            ca-certificates
+
+      - name: Install Arm GNU Toolchain 14.2.Rel1
+        run: |
+          mkdir -p "$RUNNER_TEMP/arm-gnu"
+          wget -O "$RUNNER_TEMP/arm-gnu.tar.xz" "$ARM_TOOLCHAIN_URL"
+          tar -xf "$RUNNER_TEMP/arm-gnu.tar.xz" -C "$RUNNER_TEMP/arm-gnu" --strip-components=1
+          echo "$RUNNER_TEMP/arm-gnu/bin" >> "$GITHUB_PATH"
 
       - name: Show tool versions
         run: |
@@ -31,25 +45,34 @@ jobs:
           arm-none-eabi-gcc --version
           arm-none-eabi-g++ --version
 
-      - name: Fetch Pico SDK 2.1.1 exactly like working UF2
+      - name: Fetch Pico SDK 2.1.1
         run: |
           git clone --branch 2.1.1 --depth 1 https://github.com/raspberrypi/pico-sdk.git "$PICO_SDK_PATH"
           git -C "$PICO_SDK_PATH" submodule update --init --recursive
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPICO_BOARD=pico2_w -DPICO_SDK_PATH="$PICO_SDK_PATH" -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPICO_BOARD=pico2_w \
+            -DPICO_SDK_PATH="$PICO_SDK_PATH" \
+            -DCMAKE_C_COMPILER=arm-none-eabi-gcc \
+            -DCMAKE_CXX_COMPILER=arm-none-eabi-g++ \
+            -DCMAKE_ASM_COMPILER=arm-none-eabi-gcc \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build --verbose
 
       - name: Show output sizes
         run: |
-          ls -lh build/*.uf2 build/*.bin build/*.elf build/*.hex
+          ls -lh build/*.uf2 build/*.bin build/*.elf build/*.hex || true
+          sha256sum build/*.uf2 || true
 
-      - name: Upload build outputs
+      - name: Upload UF2 artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PicoW_USB_BT_Audio-UAC2-original-mainfix-memory-v14
+          name: PicoW_USB_BT_Audio-UAC2-toolchain14-v15
           path: |
             build/*.uf2
             build/*.bin

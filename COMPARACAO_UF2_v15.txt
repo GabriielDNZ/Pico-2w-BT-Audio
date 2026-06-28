@@ -1,0 +1,35 @@
+Comparacao dos UF2 enviados:
+
+1) Pico2W_USB_BT_0.9(1).uf2 - FUNCIONA
+   SHA256: a226b8b9293b3f7e0da6e3390ebf936bfe23cae3c9335ca2bcb76629046a9ae4
+   Tamanho UF2: 1.973.248 bytes
+   Blocos UF2: 3854
+   Area app: 0x10000000 ate 0x100f0c00 (986.368 bytes)
+   USB Device Descriptor: 12010002ef020140feca1040000101020301
+   USB Config Descriptor: identico ao UF2 quebrado, wTotalLength=152, interfaces=2
+   Strings: TinyUSB / TinyUSB BT / PicoW_USB_BT_Audio / SDK 2.1.1
+   Data de build encontrada: Apr  9 2026
+   Newlib/toolchain encontrada no binario: arm-14
+
+2) PicoW_USB_BT_Audio(1).uf2 - QUEBRADO
+   SHA256: 24de967ba60121a334a49d91f76b7f10072d87b10effad3ed4bf9dc58b165fc9
+   Tamanho UF2: 1.951.744 bytes
+   Blocos UF2: 3812
+   Area app: 0x10000000 ate 0x100ee200 (975.616 bytes)
+   USB Device Descriptor: 12010002ef020140feca1040000101020301
+   USB Config Descriptor: identico ao UF2 funcional, wTotalLength=152, interfaces=2
+   Strings: TinyUSB / TinyUSB BT / PicoW_USB_BT_Audio / SDK 2.1.1
+   Data de build encontrada: Jun 28 2026
+   Newlib/toolchain encontrada no binario: toolchain do runner Linux/GCC 13.x
+
+Conclusao:
+- O problema de conectar/desconectar NAO apareceu no descriptor USB: os descriptors USB principais sao iguais.
+- O boot inicial tambem e igual.
+- O UF2 funcional e 10.752 bytes maior na area de app.
+- A diferenca forte detectada e o ambiente de compilacao/toolchain: o funcional aponta para Arm GNU Toolchain 14.x; o quebrado foi gerado no GitHub com gcc-arm-none-eabi do Ubuntu/GCC 13.x.
+
+Acao desta v15:
+- Fonte original UAC2 mantida praticamente intacta.
+- Workflow novo baixa e usa Arm GNU Toolchain 14.2.Rel1.
+- Pico SDK mantido em 2.1.1.
+- A ideia e parar de mexer no descriptor e reproduzir o ambiente do UF2 que funciona.
