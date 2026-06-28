@@ -84,7 +84,7 @@
 // period to keep the Bluetooth A2DP stream alive. Micro-gaps below this are not
 // filled with silence, which avoids the old picote/distorção.
 #define SBC_LOW_DELAY_FRAMES_PER_PACKET 7
-#define BT_KEEPALIVE_SILENCE_IDLE_MS 110
+#define BT_KEEPALIVE_SILENCE_IDLE_MS 115
 
 typedef struct {
     // bitmaps
@@ -1567,7 +1567,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 sbc_configuration.max_bitpool_value,
                 sbc_configuration.channel_mode);
 
-            audio_timer_interval = 11;  // safe SBC 110 ms pacing; keep packet size from 105 ms profile
+            audio_timer_interval = 11;  // safe SBC 115 ms pacing; keep packet size below broken 120 ms profile
 
             audio_slot_queue_configure_with_count(btstack_sbc_encoder_num_audio_frames(), AUDIO_SLOT_COUNT_SBC);
 
