@@ -165,7 +165,7 @@ extern "C" {
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_OUT   USB_AUDIO_SPK_PACKET_BYTES
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_SZ_OUT   USB_AUDIO_SPK_PACKET_BYTES
 
-#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ     (USB_AUDIO_SPK_PACKET_BYTES * 12)
+#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ     (USB_AUDIO_SPK_PACKET_BYTES * 4)
 #define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX        USB_AUDIO_SPK_PACKET_BYTES
 
 // Number of Standard AS Interface Descriptors (4.9.1) defined per audio function - this is required to be able to remember the current alternate settings of these interfaces - We restrict us here to have a constant number for all audio functions (which means this has to be the maximum number of AS interfaces an audio function has and a second audio function with less AS interfaces just wastes a few bytes)

@@ -227,12 +227,9 @@ static int aac_bit_rate = 192000;
 
 
 static const uint8_t media_sbc_codec_capabilities[] = {
-    // PS5 USB input is fixed at 48 kHz stereo/16-bit. Do not advertise 44.1/32/16 kHz
-    // or mono/dual-channel modes here, otherwise some sinks negotiate a rate/mode that
-    // does not match the incoming USB stream and the result is distorted/picoted audio.
-    0x11,  // 48 kHz + Joint Stereo
-    0x89,  // Block length 16 + 8 subbands + Loudness allocation
-    2, 45  // Conservative but not too low bitpool range
+    0xFF,//(AVDTP_SBC_44100 << 4) | AVDTP_SBC_STEREO,
+    0xFF,//(AVDTP_SBC_BLOCK_LENGTH_16 << 4) | (AVDTP_SBC_SUBBANDS_8 << 2) | AVDTP_SBC_ALLOCATION_METHOD_LOUDNESS,
+    2, 53
 };
 
 
@@ -738,10 +735,13 @@ static int fill_sbc_audio_buffer(a2dp_media_sending_context_t * context){
     int total_num_bytes_read = 0;
     unsigned int num_audio_samples_per_sbc_buffer = btstack_sbc_encoder_num_audio_frames();
 
-    while (context->samples_ready >= num_audio_samples_per_sbc_buffer &&
-           (context->max_media_payload_size - context->codec_storage_count) >= btstack_sbc_encoder_sbc_buffer_length()){
+    // Consume slots diretamente da ready_queue — sem depender de samples_ready time-based.
+    // Isso evita underrun: so processa o que realmente chegou via USB.
+    while ((context->max_media_payload_size - context->codec_storage_count) >= btstack_sbc_encoder_sbc_buffer_length()){
 
         uint8_t slot_idx;
+        // audio_slot_pop retorna silencio se nao ha dados — para SBC queremos parar aqui
+        if (!audio_slot_has_data()) break;
         if (!audio_slot_pop(&slot_idx)) break;
 
         btstack_sbc_encoder_process_data(slot_pool[slot_idx].data);
@@ -753,7 +753,11 @@ static int fill_sbc_audio_buffer(a2dp_media_sending_context_t * context){
 
         memcpy(&context->codec_storage[1 + context->codec_storage_count], sbc_frame, sbc_frame_size);
         context->codec_storage_count += sbc_frame_size;
-        context->samples_ready -= num_audio_samples_per_sbc_buffer;
+        // samples_ready ajustado para nao acumular erro de drift
+        if (context->samples_ready >= num_audio_samples_per_sbc_buffer)
+            context->samples_ready -= num_audio_samples_per_sbc_buffer;
+        else
+            context->samples_ready = 0;
 
         audio_slot_release(slot_idx);
     }
@@ -915,7 +919,11 @@ static void avdtp_audio_timeout_handler(btstack_timer_source_t * timer){
     context->samples_ready += num_samples;
 
     // Cap to prevent unbounded accumulation when USB audio pauses
-    uint32_t max_ready = 4 * acc_num_simples;
+    // Para SBC usa frame SBC; para AAC/ELD usa acc_num_simples
+    uint32_t frame_size = (cur_codec == 1)
+        ? btstack_sbc_encoder_num_audio_frames()
+        : acc_num_simples;
+    uint32_t max_ready = 8 * frame_size;
     if (context->samples_ready > max_ready) {
         context->samples_ready = max_ready;
     }
@@ -1002,8 +1010,10 @@ static void avdtp_audio_timeout_handler(btstack_timer_source_t * timer){
     switch (codec_type){
 
         case AVDTP_CODEC_SBC:
+            // SBC: consumo data-driven, nao depende de samples_ready
             fill_sbc_audio_buffer(context);
-            if ((context->codec_storage_count + btstack_sbc_encoder_sbc_buffer_length()) > context->max_media_payload_size){
+            if (context->codec_storage_count > 0 &&
+                (context->codec_storage_count + btstack_sbc_encoder_sbc_buffer_length()) > context->max_media_payload_size){
                 // schedule sending
                 context->codec_ready_to_send = 1;
                 a2dp_source_stream_endpoint_request_can_send_now(context->avdtp_cid, context->local_seid);
@@ -1507,9 +1517,11 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 sbc_configuration.max_bitpool_value,
                 sbc_configuration.channel_mode);
 
-            audio_timer_interval = 10;
+            // SBC: 5ms timer para alinhar melhor com frame de 128 samples (128/48 = 2.67ms)
+            audio_timer_interval = 5;
 
             audio_slot_queue_configure_with_count(btstack_sbc_encoder_num_audio_frames(), AUDIO_SLOT_COUNT_SBC);
+            printf("SBC frame size: %d samples, slot_frame_int16: %d\n", btstack_sbc_encoder_num_audio_frames(), btstack_sbc_encoder_num_audio_frames()*2);
 
             cur_codec = 1;
 
@@ -2139,20 +2151,6 @@ static int setup_sbc_configuration(){
     configuration.allocation_method  = avdtp_choose_sbc_allocation_method(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_allocation_method_bitmap(packet));
     configuration.max_bitpool_value  = avdtp_choose_sbc_max_bitpool_value(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_max_bitpool_value(packet));
     configuration.min_bitpool_value  = avdtp_choose_sbc_min_bitpool_value(sc.local_stream_endpoint, avdtp_subevent_signaling_media_codec_sbc_capability_get_min_bitpool_value(packet));
-
-    // Safety clamp for PS5 path: USB is always 48 kHz stereo, so force the SBC
-    // transport to match it. Also avoid the very high bitpool values that can
-    // overload the Pico 2W link, but do not go extremely low because that can
-    // sound distorted on some headphones.
-    configuration.sampling_frequency = 48000;
-    configuration.channel_mode       = AVDTP_CHANNEL_MODE_JOINT_STEREO;
-    configuration.block_length       = 16;
-    configuration.subbands           = 8;
-    configuration.allocation_method  = AVDTP_SBC_ALLOCATION_METHOD_LOUDNESS;
-    if (configuration.max_bitpool_value > 45) configuration.max_bitpool_value = 45;
-    if (configuration.max_bitpool_value < 35) configuration.max_bitpool_value = 35;
-    if (configuration.min_bitpool_value < 2)  configuration.min_bitpool_value = 2;
-    if (configuration.min_bitpool_value > configuration.max_bitpool_value) configuration.min_bitpool_value = 2;
 
     // setup SBC configuration
     avdtp_config_sbc_store(media_codec_config_data, &configuration);
