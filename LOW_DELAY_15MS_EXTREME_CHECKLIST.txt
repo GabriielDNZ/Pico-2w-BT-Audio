@@ -1,0 +1,13 @@
+LOW-DELAY 15MS EXTREME
+
+Base: LOW-DELAY 35MS BALANCED AUTORECONNECT FASTSTART
+
+Changes:
+- BT_KEEPALIVE_SILENCE_IDLE_MS: 35 -> 15
+- AUDIO_SLOT_COUNT_SBC: 7 -> 4
+- audio_timer_interval: 5 ms -> 3 ms
+- SBC_LOW_DELAY_FRAMES_PER_PACKET: 2 -> 1
+- Autoreconnect/FastStart kept enabled
+
+Warning:
+- This is aggressive and may cause picote/audio instability on some headphones.
