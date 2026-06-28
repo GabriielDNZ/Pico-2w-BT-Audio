@@ -43,7 +43,7 @@ uint8_t const * tud_descriptor_device_cb(void)
 #define EPNUM_AUDIO_OUT    0x01
 #define EPNUM_AUDIO_IN     0x02
 
-#define AUDIO10_DESC_LEN   184
+#define AUDIO10_DESC_LEN   192
 #define CONFIG_TOTAL_LEN   (TUD_CONFIG_DESC_LEN + AUDIO10_DESC_LEN)
 
 uint8_t const desc_configuration[] =
@@ -51,10 +51,8 @@ uint8_t const desc_configuration[] =
     // Config number, interface count, string index, total length, attributes, power in mA
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
 
-    // UAC1 headset descriptor without IAD.
-    // USB 1.1 audio devices are commonly advertised directly through
-    // AudioControl + AudioStreaming interfaces; some hosts do not open
-    // the OUT endpoint when an IAD is present on a UAC1/bcdUSB 1.10 device.
+    // UAC1 headset descriptor: speaker OUT + microphone IN.
+    0x08, 0x0B, ITF_NUM_AUDIO_CONTROL, ITF_NUM_TOTAL, 0x01, 0x01, 0x00, 0x02,
     0x09, 0x04, ITF_NUM_AUDIO_CONTROL, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00,
     0x0A, 0x24, 0x01, 0x00, 0x01, 0x47, 0x00, 0x02,
       ITF_NUM_AUDIO_STREAMING_SPK, ITF_NUM_AUDIO_STREAMING_MIC,

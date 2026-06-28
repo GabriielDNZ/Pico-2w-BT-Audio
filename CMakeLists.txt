@@ -42,16 +42,23 @@ pico_sdk_init()
 set(TINYUSB_AUDIO_DEVICE_C "${PICO_SDK_PATH}/lib/tinyusb/src/class/audio/audio_device.c")
 if (EXISTS "${TINYUSB_AUDIO_DEVICE_C}")
     file(READ "${TINYUSB_AUDIO_DEVICE_C}" TINYUSB_AUDIO_DEVICE_SRC)
-    string(FIND "${TINYUSB_AUDIO_DEVICE_SRC}" "itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_UNDEF" TINYUSB_UAC1_PATCHED)
-    if (TINYUSB_UAC1_PATCHED EQUAL -1)
+
+    # Pico SDK 2.1.1 brings TinyUSB with the Audio driver focused on UAC2.
+    # This project intentionally advertises UAC1 (bInterfaceProtocol = 0) for PS5.
+    # Patch TinyUSB at configure time so the device-side audio driver binds to
+    # UAC1 AudioControl interfaces instead of leaving SET_INTERFACE unhandled.
+    string(FIND "${TINYUSB_AUDIO_DEVICE_SRC}" "AUDIO_INT_PROTOCOL_CODE_UNDEF" TINYUSB_UAC1_ALREADY_PATCHED)
+    if (TINYUSB_UAC1_ALREADY_PATCHED EQUAL -1)
         string(REPLACE
-            "TU_VERIFY(itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_V2);"
-            "TU_VERIFY(itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_V2 ||\n            itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_UNDEF);"
+            "itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_V2"
+            "(itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_V2 || itf_desc->bInterfaceProtocol == AUDIO_INT_PROTOCOL_CODE_UNDEF)"
             TINYUSB_AUDIO_DEVICE_SRC
             "${TINYUSB_AUDIO_DEVICE_SRC}"
         )
         file(WRITE "${TINYUSB_AUDIO_DEVICE_C}" "${TINYUSB_AUDIO_DEVICE_SRC}")
         message(STATUS "Patched TinyUSB audio driver to accept UAC1 interface protocol")
+    else()
+        message(STATUS "TinyUSB audio driver already accepts UAC1 interface protocol")
     endif()
 endif()
 

@@ -461,9 +461,13 @@ static uint16_t filling_offset    = 0;
 static bool     filling_slot_valid = false;
 static uint16_t slot_frame_int16  = AUDIO_SLOT_MAX_INT16; // set per codec
 
-static bool is_usb_streaming = false;
-static bool is_usb_endpoint_open = false;
-static bool is_usb_rx_seen = false;
+static volatile bool is_usb_streaming = false;
+static volatile bool is_usb_endpoint_open = false;
+static volatile bool is_usb_rx_seen = false;
+// 0 = host has not selected speaker alt=1 / endpoint closed
+// 1 = speaker alt=1 selected, waiting for USB OUT packets
+// 2 = USB OUT packets have been seen
+static volatile uint8_t usb_audio_diag_state = 0;
 static bool have_ldac_codec_capabilities = false;
 static bool have_aaceld_codec_capabilities = false;
 bd_addr_t cur_active_device;
@@ -474,37 +478,38 @@ bd_addr_t cur_active_device;
 
 static void audio_slot_fill_idle_audio(int16_t *dst, uint16_t int16_count) {
 #if USB_AUDIO_IDLE_TEST_TONE
-    /*
-     * Audio diagnostic through the Bluetooth headset itself:
-     *   1) continuous high beep  = USB speaker OUT endpoint is NOT open
-     *   2) slow pulsed low beep  = endpoint opened, but no USB audio packets arrived
-     *   3) short click/very low  = USB packets were seen, but the queue under-ran
-     * Real USB samples always override this tone via audio_slot_push_samples().
-     */
-    static uint32_t frame_counter = 0;
+    static uint32_t phase = 0;
     uint16_t frames = int16_count / 2;
+
+    uint8_t state = usb_audio_diag_state;
 
     for (uint16_t i = 0; i < frames; i++) {
         int16_t sample = 0;
 
-        if (!is_usb_endpoint_open) {
-            // Original-style continuous beep: host did not select alt setting for speaker OUT.
-            uint16_t p = frame_counter % 48;
-            sample = (p < 24) ? 3000 : -3000;
-        } else if (!is_usb_rx_seen) {
-            // Endpoint is open, but no packets: obvious slow pulsed low beep.
-            uint16_t gate = (frame_counter / 24000) % 2;   // ~0.5 s on/off at 48 kHz
-            uint16_t p = frame_counter % 160;
-            sample = gate ? ((p < 80) ? 2200 : -2200) : 0;
+        if (state == 0) {
+            // Continuous higher tone: host has not opened speaker alt=1 / OUT EP.
+            sample = ((phase % 48) < 24) ? 3000 : -3000;
+        } else if (state == 1) {
+            // Slow pulsing lower tone: OUT EP opened, but no USB audio bytes arrived yet.
+            uint32_t p = phase % 24000; // about 0.5 s at 48 kHz
+            if (p < 12000) {
+                sample = ((phase % 96) < 48) ? 2400 : -2400;
+            } else {
+                sample = 0;
+            }
         } else {
-            // Packets were seen before, but there is temporary under-run: very quiet tick.
-            uint16_t p = frame_counter % 48000;
-            sample = (p < 80) ? 1200 : 0;
+            // Very short chirp: USB packets were seen but the queue is currently empty.
+            uint32_t p = phase % 48000; // once per second
+            if (p < 2400) {
+                sample = ((phase % 96) < 48) ? 1800 : -1800;
+            } else {
+                sample = 0;
+            }
         }
 
         dst[(i * 2) + 0] = sample;
         dst[(i * 2) + 1] = sample;
-        frame_counter++;
+        phase++;
     }
 #else
     memset(dst, 0, int16_count * sizeof(int16_t));
@@ -749,13 +754,21 @@ void set_usb_streaming(bool flag){
 
 void set_usb_endpoint_open(bool flag){
     is_usb_endpoint_open = flag;
-    if (!flag) {
+    if (flag){
+        if (usb_audio_diag_state == 0) usb_audio_diag_state = 1;
+    } else {
+        usb_audio_diag_state = 0;
         is_usb_rx_seen = false;
     }
 }
 
 void set_usb_rx_seen(bool flag){
     is_usb_rx_seen = flag;
+    if (flag) usb_audio_diag_state = 2;
+}
+
+void set_usb_diag_state(uint8_t state){
+    usb_audio_diag_state = state;
 }
 
 bool get_allow_switch_slot(){
