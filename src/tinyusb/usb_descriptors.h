@@ -1,16 +1,12 @@
 /*
- * UAC1 descriptors for a PS5-friendly USB headset profile.
- *
- * This keeps the device in the USB Audio 1.0 path used by the official
- * TinyUSB audio10 support instead of feeding a hand-built UAC1 tree to
- * the UAC2-style headset descriptor.
+ * UAC1 speaker-only descriptors for a PS5-friendly USB audio output profile.
  */
 
 #ifndef _USB_DESCRIPTORS_H_
 #define _USB_DESCRIPTORS_H_
 
-#define USB_AUDIO_PNP_VID                    0x0C76
-#define USB_AUDIO_PNP_PID                    0x161F
+#define USB_AUDIO_PNP_VID                    0x0D8C
+#define USB_AUDIO_PNP_PID                    0x0014
 #define USB_AUDIO_PNP_BCD_USB                0x0110
 #define USB_AUDIO_PNP_BCD_DEVICE             0x0100
 
@@ -26,10 +22,11 @@
 #define USB_HID_EP_SIZE                      4
 #define USB_HID_EP_INTERVAL                  32
 
-// Entity IDs follow TinyUSB's UAC1 headset example layout.
 #define UAC1_ENTITY_SPK_INPUT_TERMINAL       0x01
 #define UAC1_ENTITY_SPK_FEATURE_UNIT         0x02
 #define UAC1_ENTITY_SPK_OUTPUT_TERMINAL      0x03
+
+// Kept defined so uac.c can compile without mic path enabled.
 #define UAC1_ENTITY_MIC_INPUT_TERMINAL       0x11
 #define UAC1_ENTITY_MIC_FEATURE_UNIT         0x12
 #define UAC1_ENTITY_MIC_OUTPUT_TERMINAL      0x13
@@ -38,7 +35,6 @@ enum
 {
   ITF_NUM_AUDIO_CONTROL = 0,
   ITF_NUM_AUDIO_STREAMING_SPK,
-  ITF_NUM_AUDIO_STREAMING_MIC,
   ITF_NUM_TOTAL
 };
 

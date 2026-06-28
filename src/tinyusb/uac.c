@@ -408,7 +408,8 @@ void tinyusb_control_task(void){
 
  static bool uac1_is_mic_feature_unit(uint8_t entity)
  {
-   return entity == UAC1_ENTITY_MIC_FEATURE_UNIT;
+   (void)entity;
+   return false;
  }
 
  static uint8_t uac1_clamp_channel(uint8_t channel, uint8_t max_channels)
@@ -547,7 +548,7 @@ void tinyusb_control_task(void){
    uint8_t const control = UAC_REQ_CONTROL(p_request);
    uint8_t const request = p_request->bRequest;
 
-   if ((ep != 0x01 && ep != 0x82) || control != AUDIO10_EP_CTRL_SAMPLING_FREQ)
+   if (ep != 0x01 || control != AUDIO10_EP_CTRL_SAMPLING_FREQ)
    {
      return false;
    }
@@ -574,7 +575,7 @@ void tinyusb_control_task(void){
    uint8_t const ep = UAC_REQ_ENDPOINT(p_request);
    uint8_t const control = UAC_REQ_CONTROL(p_request);
 
-   if ((ep != 0x01 && ep != 0x82) ||
+   if (ep != 0x01 ||
        control != AUDIO10_EP_CTRL_SAMPLING_FREQ ||
        p_request->bRequest != AUDIO10_CS_REQ_SET_CUR ||
        p_request->wLength != sizeof(audio10_control_cur_3_t))
@@ -631,8 +632,6 @@ void tinyusb_control_task(void){
    if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt == 0)
        blink_interval_ms = BLINK_MOUNTED;
 
-   if (ITF_NUM_AUDIO_STREAMING_MIC == itf && alt == 0)
-       is_usb_mic_running = false;
  
    return true;
  }
@@ -647,8 +646,6 @@ void tinyusb_control_task(void){
    if (ITF_NUM_AUDIO_STREAMING_SPK == itf && alt != 0)
        blink_interval_ms = BLINK_STREAMING;
 
-   if (ITF_NUM_AUDIO_STREAMING_MIC == itf)
-       is_usb_mic_running = alt != 0;
  
    // Clear buffer when streaming format is changed
    spk_data_size = 0;
@@ -699,25 +696,20 @@ void tinyusb_control_task(void){
 
  static void queue_mic_silence(void)
  {
-   if (is_usb_mic_running)
-   {
-     tud_audio_write(mic_silence, sizeof(mic_silence));
-   }
+   // Speaker-only build: no USB microphone endpoint.
  }
  
+
+#if CFG_TUD_AUDIO_ENABLE_EP_IN
  bool tud_audio_tx_done_pre_load_cb(uint8_t rhport, uint8_t itf, uint8_t ep_in, uint8_t cur_alt_setting)
  {
    (void)rhport;
+   (void)itf;
    (void)ep_in;
    (void)cur_alt_setting;
-
-   if (itf == ITF_NUM_AUDIO_STREAMING_MIC)
-   {
-     queue_mic_silence();
-   }
-
    return true;
  }
+#endif
  
  //--------------------------------------------------------------------+
  // AUDIO Task
